@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.7.14/dist/vue.js"></script>
+</head>
+<body>
+    <div id="app">
+        <div>{{message}}</div>
+        <input v-model="input" type="text" placeholder="请输入消息">
+        <br>
+        <button @click="send">发送</button>
+    </div>
+<script>
+    new Vue({
+        el: '#app',
+        data: {
+            message: "",
+            input: "",
+            ws: ""
+        },
+        // 组件挂载完成后执行
+        mounted() {
+            // 连接服务器
+            this.ws = new WebSocket("ws://localhost:8000/ws");
+            // 当使用this.ws.onopen = function(e) {}时，this指向WebSocket，
+            // 所以要拿到message或input时需要const self = this;
+            // const self = this;
+            // 连接成功
+            this.ws.onopen = (e) => {
+                console.log("连接成功");
+            }
+            // 监听服务器消息
+            this.ws.onmessage = (e) => {
+                console.log(e.data);
+                // 更新消息
+                this.message = e.data;
+            }
+            // 连接关闭
+            this.ws.onclose = (e) => {
+                console.log("连接关闭");
+            }
+
+        },
+        methods: {
+            send() {
+                // 发送消息给服务器
+                this.ws.send(this.input);
+            }
+        }
+    })
+</script>
+</body>
+</html>

@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 对话 · 浅色图片背景 · Markdown</title>
+    <!-- Vue2 CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.7.14/dist/vue.js"></script>
+    <!-- Markdown解析库 marked CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        /* 全局重置 & 字体 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+        }
+
+        body {
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            /* 浅色自然风景图片背景 */
+            background-image: url('https://images.unsplash.com/photo-1506744038136-46273834b3fb?q=80&w=2940&auto=format&fit=crop');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        /* 主应用容器 —— 浅色毛玻璃 */
+        #app {
+            width: 1400px;
+            max-width: 98vw;
+            height: 90vh;
+            display: flex;
+            border-radius: 36px;
+            background: rgba(255, 255, 255, 0.78);
+            backdrop-filter: blur(18px) saturate(180%);
+            -webkit-backdrop-filter: blur(18px) saturate(180%);
+            box-shadow: 0 30px 50px -15px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.8) inset;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.9);
+            transition: all 0.3s;
+        }
+
+        /* ========== 左侧历史对话栏 ========== */
+        .sidebar {
+            width: 280px;
+            background: rgba(245, 250, 255, 0.65);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid rgba(255, 255, 255, 0.9);
+            padding: 22px 12px 16px 12px;
+            flex-shrink: 0;
+        }
+
+        .sidebar-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 6px 18px 6px;
+        }
+
+        .sidebar-header h3 {
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: #1e3a5f;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            letter-spacing: -0.01em;
+        }
+
+        .sidebar-header h3 i {
+            font-size: 1.2rem;
+            font-style: normal;
+        }
+
+        .new-chat-btn {
+            background: rgba(255, 255, 255, 0.95);
+            border: none;
+            width: 38px;
+            height: 38px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.6rem;
+            color: #3b82f6;
+            cursor: pointer;
+            box-shadow: 0 6px 14px rgba(59, 130, 246, 0.1);
+            transition: all 0.2s;
+            border: 1px solid rgba(255, 255, 255, 0.9);
+            line-height: 1;
+        }
+
+        .new-chat-btn:hover {
+            background: #ffffff;
+            transform: scale(1.04);
+            color: #2563eb;
+            box-shadow: 0 8px 18px rgba(59, 130, 246, 0.2);
+        }
+
+        /* 历史记录列表 */
+        .history-list {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding-right: 4px;
+        }
+
+        .history-item {
+            background: transparent;
+            padding: 12px 16px;
+            border-radius: 16px;
+            font-size: 0.9rem;
+            color: #1e3a5f;
+            cursor: pointer;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border: 1px solid transparent;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-weight: 450;
+        }
+
+        .history-item i {
+            opacity: 0.7;
+            font-style: normal;
+            font-size: 1rem;
+        }
+
+        .history-item:hover {
+            background: rgba(255, 255, 255, 0.8);
+            border-color: rgba(185, 214, 255, 0.7);
+        }
+
+        .history-item.active {
+            background: #ffffff;
+            border-color: #93c5fd;
+            box-shadow: 0 6px 14px rgba(59, 130, 246, 0.12);
+            font-weight: 500;
+            color: #2563eb;
+        }
+
+        .history-item.active i {
+            opacity: 1;
+        }
+
+        .history-list::-webkit-scrollbar {
+            width: 5px;
+        }
+
+        .history-list::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .history-list::-webkit-scrollbar-thumb {
+            background: #bfdbfe;
+            border-radius: 20px;
+        }
+
+        /* ========== 右侧主工作区 ========== */
+        .main-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: rgba(255, 255, 255, 0.45);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            position: relative;
+        }
+
+        /* 顶部信息栏 */
+        .chat-header {
+            padding: 22px 30px 10px 30px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.9);
+        }
+
+        .chat-header .title-area {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .chat-header .title-area h2 {
+            font-size: 1.35rem;
+            font-weight: 650;
+            color: #0f2b4a;
+            letter-spacing: -0.02em;
+        }
+
+        .status-badge {
+            background: rgba(220, 252, 231, 0.95);
+            color: #166534;
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 4px 12px;
+            border-radius: 40px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.9);
+        }
+
+        .status-badge::before {
+            content: '';
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            background: #22c55e;
+            border-radius: 50%;
+            box-shadow: 0 0 8px #22c55e;
+        }
+
+        .user-tag {
+            font-size: 0.85rem;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 6px 18px;
+            border-radius: 40px;
+            color: #1e3a5f;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(4px);
+            font-weight: 450;
+        }
+
+        /* 聊天记录区域 (工作区) */
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px 30px 12px 30px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            scroll-behavior: smooth;
+        }
+
+        /* 每条消息 */
+        .message {
+            display: flex;
+            max-width: 85%;
+            animation: fadeIn 0.2s ease;
+        }
+
+        .message.user {
+            align-self: flex-end;
+            flex-direction: row-reverse;
+        }
+
+        .message.bot {
+            align-self: flex-start;
+        }
+
+        .avatar {
+            width: 42px;
+            height: 42px;
+            border-radius: 14px;
+            background: rgba(238, 242, 255, 0.95);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            margin-right: 14px;
+            flex-shrink: 0;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(2px);
+        }
+
+        .message.user .avatar {
+            margin-right: 0;
+            margin-left: 14px;
+            background: rgba(219, 234, 254, 0.95);
+        }
+
+        .message-bubble {
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(4px);
+            padding: 14px 22px;
+            border-radius: 22px;
+            border-top-left-radius: 8px;
+            box-shadow: 0 8px 20px -8px rgba(0, 0, 0, 0.05);
+            font-size: 0.95rem;
+            line-height: 1.6;
+            color: #0f2b4a;
+            word-break: break-word;
+            border: 1px solid rgba(255, 255, 255, 0.9);
+        }
+
+        .message.user .message-bubble {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-top-right-radius: 8px;
+            border-top-left-radius: 22px;
+            box-shadow: 0 10px 20px -8px rgba(59, 130, 246, 0.4);
+            backdrop-filter: none;
+            font-weight: 400;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        /* ===== Markdown 内容样式 (bot消息) ===== */
+        .message-bubble p {
+            margin: 0 0 0.6rem 0;
+        }
+
+        .message-bubble p:last-child {
+            margin-bottom: 0;
+        }
+
+        .message-bubble h1,
+        .message-bubble h2,
+        .message-bubble h3,
+        .message-bubble h4,
+        .message-bubble h5,
+        .message-bubble h6 {
+            margin: 0.8rem 0 0.4rem 0;
+            font-weight: 600;
+            line-height: 1.3;
+            color: #0f2b4a;
+        }
+
+        .message-bubble h1 { font-size: 1.4rem; }
+        .message-bubble h2 { font-size: 1.2rem; }
+        .message-bubble h3 { font-size: 1.05rem; }
+        .message-bubble h4 { font-size: 0.98rem; }
+
+        .message-bubble ul,
+        .message-bubble ol {
+            margin: 0.5rem 0 0.5rem 1.4rem;
+            padding-left: 0.8rem;
+        }
+
+        .message-bubble li {
+            margin-bottom: 0.25rem;
+        }
+
+        .message-bubble pre {
+            background: #f1f5f9;
+            border-radius: 12px;
+            padding: 14px 18px;
+            margin: 0.7rem 0;
+            overflow-x: auto;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+        }
+
+        .message-bubble pre code {
+            background: transparent;
+            padding: 0;
+            font-size: 0.85rem;
+            line-height: 1.5;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+            color: #1e293b;
+        }
+
+        .message-bubble code {
+            background: rgba(59, 130, 246, 0.08);
+            color: #1e40af;
+            padding: 2px 6px;
+            border-radius: 6px;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+            font-size: 0.85rem;
+        }
+
+        .message-bubble blockquote {
+            margin: 0.7rem 0;
+            padding: 0.5rem 1rem;
+            border-left: 4px solid #93c5fd;
+            background: #f8fafc;
+            border-radius: 0 8px 8px 0;
+            color: #475569;
+        }
+
+        .message-bubble blockquote p {
+            margin: 0;
+        }
+
+        .message-bubble a {
+            color: #2563eb;
+            text-decoration: none;
+            border-bottom: 1px dashed #93c5fd;
+            transition: all 0.15s;
+        }
+
+        .message-bubble a:hover {
+            color: #1d4ed8;
+            border-bottom-color: #3b82f6;
+        }
+
+        .message-bubble table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 0.7rem 0;
+            font-size: 0.85rem;
+        }
+
+        .message-bubble th,
+        .message-bubble td {
+            border: 1px solid #e2e8f0;
+            padding: 8px 12px;
+            text-align: left;
+        }
+
+        .message-bubble th {
+            background: #f8fafc;
+            font-weight: 600;
+            color: #1e3a5f;
+        }
+
+        .message-bubble hr {
+            border: none;
+            border-top: 1px solid #e2e8f0;
+            margin: 1rem 0;
+        }
+
+        .message-bubble img {
+            max-width: 100%;
+            border-radius: 12px;
+            margin: 0.5rem 0;
+        }
+
+        /* 用户消息里的 markdown 样式 (兼容) */
+        .message.user .message-bubble code {
+            background: rgba(255, 255, 255, 0.2);
+            color: #e0eaff;
+        }
+
+        .message.user .message-bubble pre {
+            background: rgba(0, 0, 0, 0.15);
+            border-color: rgba(255, 255, 255, 0.15);
+        }
+
+        .message.user .message-bubble pre code {
+            color: #f0f5ff;
+        }
+
+        .message.user .message-bubble a {
+            color: #d9e9ff;
+            border-bottom-color: rgba(255, 255, 255, 0.5);
+        }
+
+        .message.user .message-bubble blockquote {
+            background: rgba(255, 255, 255, 0.1);
+            border-left-color: rgba(255, 255, 255, 0.5);
+            color: #e8f0fe;
+        }
+
+        /* 空状态 */
+        .empty-state {
+            text-align: center;
+            margin: auto;
+            color: #4a6a8b;
+            font-size: 0.95rem;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            align-items: center;
+            opacity: 0.9;
+            background: rgba(255, 255, 255, 0.7);
+            padding: 40px 50px;
+            border-radius: 60px;
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.9);
+        }
+
+        .empty-state i {
+            font-size: 3rem;
+            font-style: normal;
+            opacity: 0.7;
+        }
+
+        /* ========== 底部输入区 ========== */
+        .input-area {
+            padding: 18px 30px 26px 30px;
+            background: rgba(255, 255, 255, 0.55);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border-top: 1px solid rgba(255, 255, 255, 0.9);
+        }
+
+        .input-wrapper {
+            display: flex;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(4px);
+            border-radius: 60px;
+            padding: 4px 4px 4px 24px;
+            border: 1px solid rgba(255, 255, 255, 0.9);
+            transition: all 0.2s;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.03);
+        }
+
+        .input-wrapper:focus-within {
+            border-color: #93c5fd;
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12), 0 8px 20px rgba(0, 0, 0, 0.05);
+            background: #ffffff;
+        }
+
+        .input-wrapper input {
+            flex: 1;
+            border: none;
+            outline: none;
+            background: transparent;
+            font-size: 0.98rem;
+            padding: 14px 8px 14px 0;
+            color: #0f2b4a;
+        }
+
+        .input-wrapper input::placeholder {
+            color: #94a3b8;
+            font-weight: 400;
+        }
+
+        .input-wrapper button {
+            background: #3b82f6;
+            border: none;
+            color: white;
+            font-weight: 600;
+            font-size: 0.95rem;
+            padding: 12px 30px;
+            border-radius: 40px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            letter-spacing: 0.01em;
+            box-shadow: 0 10px 18px -8px #3b82f6;
+            white-space: nowrap;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .input-wrapper button:hover {
+            background: #2563eb;
+            transform: translateY(-1px);
+            box-shadow: 0 14px 22px -8px #3b82f6;
+        }
+
+        .input-wrapper button:active {
+            transform: scale(0.97);
+        }
+
+        /* 动画 */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* 响应式 */
+        @media (max-width: 900px) {
+            .sidebar {
+                width: 220px;
+                padding: 16px 8px;
+            }
+            .chat-messages {
+                padding: 16px 18px;
+            }
+            .input-area {
+                padding: 14px 18px 20px;
+            }
+            .message {
+                max-width: 95%;
+            }
+            .avatar {
+                width: 36px;
+                height: 36px;
+                font-size: 1rem;
+            }
+            .message-bubble {
+                padding: 12px 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- 左侧历史对话栏 -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h3>
+                    <i>📋</i> 对话历史
+                </h3>
+                <button class="new-chat-btn" @click="newChat" title="新建对话">＋</button>
+            </div>
+            <div class="history-list">
+                <div
+                    v-for="(history, index) in historyList"
+                    :key="index"
+                    class="history-item"
+                    :class="{ active: activeHistoryIndex === index }"
+                    @click="switchHistory(index)"
+                >
+                    <i>💬</i>
+                    <span>{{ history.title }}</span>
+                </div>
+                <div v-if="historyList.length === 0" class="history-item" style="cursor: default; opacity: 0.5;">
+                    <i>📭</i> 暂无历史对话
+                </div>
+            </div>
+        </aside>
+
+        <!-- 右侧主聊天区 -->
+        <main class="main-panel">
+            <!-- 顶部 -->
+            <div class="chat-header">
+                <div class="title-area">
+                    <h2>AI 助手</h2>
+                    <span class="status-badge">在线</span>
+                </div>
+                <div class="user-tag">
+                    <i>👤</i> 用户: {{ userId || '访客' }}
+                </div>
+            </div>
+
+            <!-- 聊天记录区域 -->
+            <div class="chat-messages" ref="chatMessages">
+                <!-- 空状态 -->
+                <div v-if="chatList.length === 0" class="empty-state">
+                    <i>💬</i>
+                    <span>开始你的第一个问题吧</span>
+                </div>
+
+                <!-- 消息循环 -->
+                <div
+                    v-for="(msg, idx) in chatList"
+                    :key="idx"
+                    class="message"
+                    :class="msg.role"
+                >
+                    <div class="avatar">
+                        {{ msg.role === 'user' ? '👤' : '🤖' }}
+                    </div>
+                    <!-- AI 消息使用 v-html + marked 渲染 Markdown -->
+                    <!-- 用户消息也使用 marked 渲染，但样式做了兼容 -->
+                    <div class="message-bubble" v-html="formatMessage(msg.content)"></div>
+                </div>
+            </div>
+
+            <!-- 底部输入框 -->
+            <div class="input-area">
+                <div class="input-wrapper">
+                    <input
+                        type="text"
+                        v-model="input"
+                        placeholder="输入消息..."
+                        @keyup.enter="send"
+                        ref="inputField"
+                    >
+                    <button type="button" @click="send">
+                        <span>发送</span>
+                        <span style="font-size: 1.1rem;">↵</span>
+                    </button>
+                    <button type="button" @click="sendVosk" :disabled="startVosk">
+                        <span>开启语音</span>
+                        <span style="font-size: 1.1rem;">↵</span>
+                    </button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // 配置 marked 选项 (可选)
+        marked.setOptions({
+            breaks: true,        // 支持换行
+            gfm: true,           // 支持 GitHub 风格 Markdown
+            headerIds: false,    // 不生成标题 id
+            mangle: false,       // 不转义邮箱
+        });
+
+        new Vue({
+            el: '#app',
+            data: {
+                startVosk: false,//是否禁止语音按钮,true 是禁用，false 是启用
+                ws:null,// websocket对象
+                chatList: [],
+                input: '请给我1道python题',
+                userId: 'user_' + Math.random().toString(36).substring(2, 8),
+                historyList: [
+                    // { id: 1, title: 'Vue响应式原理', messages: [] },
+                    // { id: 2, title: '长列表性能优化', messages: [] },
+                    // { id: 3, title: 'CSS三栏布局方案', messages: [] },
+                    // { id: 4, title: '前端工程化实践', messages: [] }
+                ],
+                activeHistoryIndex: 0,
+                eventSource: null,
+            },
+            mounted() {
+                // 初始化示例消息 (包含 Markdown 格式的 AI 回复)
+                this.historyList[0].messages = [
+                    { role: 'user', content: '请解释一下Vue的响应式原理' },
+                    { role: 'bot', content: '## Vue 响应式原理\n\nVue2 使用 `Object.defineProperty` 进行数据劫持，结合发布-订阅模式实现响应式。\n\n### 核心步骤：\n1. **数据劫持**：遍历 data 中的属性，用 `Object.defineProperty` 转换为 getter/setter\n2. **依赖收集**：在 getter 中收集 Watcher\n3. **派发更新**：在 setter 中通知 Watcher 更新视图\n\n> Vue3 则改用 `Proxy` 实现，支持更多数据类型和动态属性。' }
+                ];
+                this.historyList[1].messages = [
+                    { role: 'user', content: '长列表优化有哪些方法？' },
+                    { role: 'bot', content: '## 长列表优化方案\n\n- **虚拟滚动**：只渲染可视区域内的元素\n- **`v-once`**：对静态内容只渲染一次\n- **`v-memo` (Vue3)**：缓存子树，条件更新\n- **`Object.freeze`**：冻结不需要响应式的数据\n\n```js\n// 示例：使用 Object.freeze\nthis.list = Object.freeze(bigArray)\n```\n\n这样可以避免 Vue 对大数据进行响应式处理，提升性能。' }
+                ];
+                this.historyList[2].messages = [
+                    { role: 'user', content: 'CSS三栏布局' },
+                    { role: 'bot', content: '### CSS 三栏布局方案\n\n1. **Flexbox** (推荐)\n   ```css\n   .container { display: flex; }\n   .left, .right { width: 200px; }\n   .center { flex: 1; }\n   ```\n2. **Grid** (最简洁)\n   ```css\n   .container { display: grid; grid-template-columns: 200px 1fr 200px; }\n   ```\n3. **浮动 + 负边距** (传统方案)\n4. **绝对定位** (简单但不够灵活)' }
+                ];
+                this.historyList[3].messages = [
+                    { role: 'user', content: '前端工程化包括哪些？' },
+                    { role: 'bot', content: '## 前端工程化实践\n\n- **模块化**：ES Modules、CommonJS\n- **组件化**：Vue/React 组件体系\n- **规范化**：ESLint、Prettier、Git Hooks\n- **自动化构建**：Webpack、Vite、Rollup\n- **自动化测试**：Jest、Vitest、Cypress\n- **部署与监控**：CI/CD、Sentry、Prometheus' }
+                ];
+                this.loadHistoryMessages(0);
+            },
+            methods: {
+                // 使用 marked 格式化消息内容
+                formatMessage(content) {
+                    if (!content) return '';
+                    try {
+                        return marked.parse(content);
+                    } catch (e) {
+                        // 降级处理：简单转义
+                        return content.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    }
+                },
+                // 加载指定索引的历史消息到聊天区
+                loadHistoryMessages(index) {
+                    if (index >= 0 && index < this.historyList.length) {
+                        const history = this.historyList[index];
+                        this.chatList = history.messages.map(msg => ({ ...msg }));
+                        this.activeHistoryIndex = index;
+                        this.scrollToBottom();
+                    }
+                },
+                // 切换历史对话
+                switchHistory(index) {
+                    // 保存当前聊天到历史
+                    if (this.chatList.length > 0) {
+                        if (this.activeHistoryIndex !== null && this.historyList[this.activeHistoryIndex]) {
+                            this.historyList[this.activeHistoryIndex].messages = this.chatList.map(msg => ({ ...msg }));
+                            const firstUserMsg = this.chatList.find(m => m.role === 'user');
+                            if (firstUserMsg) {
+                                let title = firstUserMsg.content.trim().slice(0, 12);
+                                if (title.length === 12) title += '…';
+                                this.historyList[this.activeHistoryIndex].title = title;
+                            }
+                        }
+                    }
+                    this.loadHistoryMessages(index);
+                },
+                // 新建对话
+                newChat() {
+                    // 保存当前聊天到历史
+                    if (this.chatList.length > 0 && this.activeHistoryIndex !== null) {
+                        const firstUserMsg = this.chatList.find(m => m.role === 'user');
+                        if (firstUserMsg) {
+                            let title = firstUserMsg.content.trim().slice(0, 12);
+                            if (title.length === 12) title += '…';
+                            this.historyList[this.activeHistoryIndex].title = title || '新对话';
+                        }
+                        this.historyList[this.activeHistoryIndex].messages = this.chatList.map(msg => ({ ...msg }));
+                    }
+
+                    // 创建新历史
+                    const newId = this.historyList.length + 1;
+                    const newHistory = {
+                        id: newId,
+                        title: '新对话',
+                        messages: []
+                    };
+                    this.historyList.push(newHistory);
+                    this.activeHistoryIndex = this.historyList.length - 1;
+                    this.chatList = [];
+                    this.input = '';
+                    if (this.eventSource) {
+                        this.eventSource.close();
+                        this.eventSource = null;
+                    }
+                    this.$nextTick(() => {
+                        if (this.$refs.inputField) this.$refs.inputField.focus();
+                    });
+                },
+                sendVosk(){//开启语音
+                                 //创建websocket 对象
+                        this.ws = new WebSocket("ws://localhost:8000/vosk");
+                        const self = this;
+                        //开启链接
+                        this.ws.onopen = function (e){
+                                console.log("链接成功");
+                        }
+                        //接收服务端的数据
+                        this.ws.onmessage =function (e){
+                            console.log("服务端的数据:",e.data);
+                            if (e.data.indexOf("开始说话") > -1){
+                                alert("开始说话");
+                                //禁止语音按钮
+                                self.startVosk = true;
+                            }else{
+                                //显示在输入框
+                                self.input = e.data;
+                                //开启语音按钮
+                                self.startVosk = false;
+                                //直接发送信息,不需要点发送按钮
+                                self.send()
+                            }
+                        }
+                },
+                // 发送消息
+                send() {
+                    const question = this.input.trim();
+                    if (!question) return;
+
+                    // 添加用户消息
+                    this.chatList.push({ role: 'user', content: question });
+                    this.input = '';
+
+                    this.scrollToBottom();
+
+                    // 更新历史标题
+                    if (this.activeHistoryIndex !== null && this.historyList[this.activeHistoryIndex]) {
+                        const history = this.historyList[this.activeHistoryIndex];
+                        if (history.title === '新对话' || history.title === '') {
+                            let newTitle = question.slice(0, 12);
+                            if (question.length > 12) newTitle += '…';
+                            history.title = newTitle;
+                        }
+                        history.messages = this.chatList.map(msg => ({ ...msg }));
+                    }
+
+                    // 准备 SSE 请求
+                    const params = `question=${encodeURIComponent(question)}&user_id=${encodeURIComponent(this.userId)}`;
+
+                    if (this.eventSource) {
+                        this.eventSource.close();
+                        this.eventSource = null;
+                    }
+
+                    const eve = new EventSource('/chat?' + params);
+                    this.eventSource = eve;
+
+                    const aiMsg = { role: 'bot', content: '正在思考，请稍等....' };
+                    this.chatList.push(aiMsg);
+                    // 添加机器人占位消息
+                    //const botMsgIndex = this.chatList.push({ role: 'bot', content: '' }) - 1;
+
+                    eve.onmessage = (e) => {
+
+                      const data = JSON.parse(e.data);
+                      if (data.done) {
+                          eve.close();
+                      } else {
+                          if (aiMsg.content.indexOf("正在思考") > -1) {
+                              aiMsg.content = "";
+                          }
+                          aiMsg.content += data.data;  // 追加文本片段
+                          this.scrollToBottom();
+                      }
+                    };
+
+                    // eve.onerror = (err) => {
+                    //     console.error('SSE 错误:', err);
+                    //     if (this.chatList[botMsgIndex] && this.chatList[botMsgIndex].content === '') {
+                    //         this.$set(this.chatList, botMsgIndex, {
+                    //             role: 'bot',
+                    //             content: '⚠️ 连接出错，请稍后重试。'
+                    //         });
+                    //     }
+                    //     eve.close();
+                    //     if (this.eventSource === eve) {
+                    //         this.eventSource = null;
+                    //     }
+                    // };
+                },
+                // 滚动到底部
+                scrollToBottom() {
+                    this.$nextTick(() => {
+                        const container = this.$refs.chatMessages;
+                        if (container) {
+                            container.scrollTop = container.scrollHeight;
+                        }
+                    });
+                }
+            },
+            beforeDestroy() {
+                if (this.eventSource) {
+                    this.eventSource.close();
+                    this.eventSource = null;
+                }
+            }
+        });
+    </script>
+</body>
+</html>

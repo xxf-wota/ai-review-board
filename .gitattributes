@@ -1,0 +1,42 @@
+# ==========================================================
+# 二进制文件：告诉 git 不要做换行符转换
+# ==========================================================
+# 不写这一段会出事：手写的 sample_plan_en.pdf 全是 ASCII、
+# 没有 NUL 字节，git 会误判成文本文件，检出时按 CRLF 转换，
+# 结果 PDF 直接损坏打不开。
+*.pdf   binary
+*.docx  binary
+*.doc    binary
+*.xlsx  binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.zip   binary
+*.gz    binary
+*.gguf  binary
+*.bin   binary
+*.wav   binary
+*.mp3   binary
+
+# 这些文件不做行级 diff（二进制 diff 没有意义，还占空间）
+*.pdf   -diff
+*.docx  -diff
+
+# ==========================================================
+# 文本文件：仓库里统一存 LF，检出时由 core.autocrlf 决定本地形式
+# ==========================================================
+*.py    text
+*.md    text
+*.txt   text
+*.yaml  text
+*.yml   text
+*.json  text
+*.sql   text
+*.html  text
+*.css   text
+*.js    text
+*.http  text
+*.gitignore text
+*.gitattributes text

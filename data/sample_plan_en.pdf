@@ -1,0 +1,44 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length 626 >>
+stream
+BT /F1 12 Tf 72 770 Td 16 TL
+(Campus Second-hand Textbook Platform) Tj T*
+() Tj T*
+(Background: textbooks are replaced every term, and most copies sit idle.) Tj T*
+(Goal: a trading platform serving 5000 students of this university.) Tj T*
+() Tj T*
+(Tech stack: FastAPI backend, Vue3 frontend, MySQL and Redis for storage.) Tj T*
+(A multimodal LLM reads the cover photo and fills in the book information.) Tj T*
+(Another LLM call does semantic matching between buyers and sellers.) Tj T*
+() Tj T*
+(Schedule: 10 weeks, finished by 3 undergraduate students.) Tj T*
+(Outcome: a running platform plus a graduation thesis.) Tj T*
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000000311 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+988
+%%EOF
