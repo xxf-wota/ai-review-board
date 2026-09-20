@@ -191,7 +191,7 @@ review_score(
 
 **原有接口回归检查：** 读 OpenAPI 确认 `/` 与 `/chat` 都还在，新模块没有弄坏原有路由。
 
-> 顺带踩到一个部署坑（**项目原有写法，未改动**）：`app/main.py` 里静态目录写的是 `./html`，只有把工作目录切到 `app/` 才能导入成功。在项目根目录用 `uvicorn app.main:app` 启动会直接报 `Directory './html' does not exist`。
+> 顺带解决了一个部署坑：`app/main.py` 里静态目录原本写的是 `./html`（相对工作目录），只有在 `app/` 目录下启动才行，在项目根目录 `uvicorn app.main:app` 会直接报 `Directory './html' does not exist`。现已改为相对项目根的 `app/html`，**在项目根目录启动即可**，验收脚本也相应改为从项目根运行。
 
 ---
 

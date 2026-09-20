@@ -15,8 +15,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-# app/main.py 里静态目录写的是 ./html，只有把工作目录切到 app 才能导入，这是项目原有的写法
-os.chdir(os.path.join(ROOT, "app"))
+# 必须从项目根目录运行：app/main.py 里静态目录是 app/html，相对项目根解析
 
 from fastapi.testclient import TestClient  # noqa: E402
 
