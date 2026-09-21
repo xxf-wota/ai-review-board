@@ -3,6 +3,7 @@ from langchain.agents.middleware import ModelCallLimitMiddleware
 from langchain.agents.structured_output import ProviderStrategy
 from langchain_core.messages import AIMessage, HumanMessage
 
+from app.ai.agent.review_agent import events
 from app.ai.agent.review_agent.schema.review_schema import PlanElementsSchema
 from app.ai.agent.review_agent.state.review_state import ReviewState
 from app.ai.model.my_model import MyModel
@@ -126,8 +127,11 @@ def extract_elements(plan_text: str) -> dict:
 def extract_node(state: ReviewState):
     plan_text = state.get("plan_text", "")
     elements = extract_elements(plan_text)
+    elements_text = format_elements(elements)
+    # 要素表单独作为一条事件推给前端，界面上要把它展示成一个面板
+    events.emit({"event": "elements", "text": elements_text})
     # 自定义AI回复消息，把要素表回显给前端
-    ai_msg = f"\n方案要素抽取完成：\n{format_elements(elements)}\n"
+    ai_msg = f"\n方案要素抽取完成：\n{elements_text}\n"
     return {
         "messages": [AIMessage(content=ai_msg)],
         "plan_elements": elements,

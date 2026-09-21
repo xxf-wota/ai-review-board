@@ -1,6 +1,8 @@
+import json
 from uuid import uuid4
 
-from fastapi import APIRouter, Body, File, HTTPException, UploadFile
+from fastapi import APIRouter, Body, File, HTTPException, Request, UploadFile
+from fastapi.responses import StreamingResponse
 
 from app.ai.agent.review_agent.node.extract_node import extract_elements, format_elements
 from app.ai.tool.plan_parser import parse_plan_bytes
@@ -8,8 +10,7 @@ from app.ai.tool.review_dao import get_session, save_session
 
 """
 评审会接口
-M1 阶段只做两件事：收方案（文件或文本）、抽出要素表并落库
-会议过程（评审发言、交叉质询）在后面阶段接
+收方案（文件或文本）、抽要素表并落库、把评审会过程用 SSE 推到前端
 """
 review_router = APIRouter(prefix="/review", tags=["评审会"])
 
@@ -90,3 +91,52 @@ async def read_session(session_id: str):
     if not data:
         raise HTTPException(status_code=404, detail=f"没有找到评审会 {session_id}")
     return data
+
+
+# 开一场评审会，用 SSE 把过程实时推到前端
+# 用 POST 而不是 EventSource：方案正文可能上万字，塞不进 URL
+# 前端要用 fetch + ReadableStream 来读
+@review_router.post("/meeting/stream")
+async def meeting_stream(request: Request, payload: dict = Body(...)):
+    session_id = (payload.get("session_id") or "").strip() or uuid4().hex
+    plan_text = (payload.get("plan_text") or "").strip()
+    max_round = int(payload.get("max_round") or 1)
+
+    # 方案正文和要素表都优先取库里的：提交阶段已经抽过要素，这里就不重复抽了
+    elements = payload.get("plan_elements") or {}
+    if not plan_text or not elements:
+        row = get_session(session_id)
+        if row:
+            plan_text = plan_text or (row.get("plan_text") or "")
+            elements = elements or (row.get("plan_elements") or {})
+
+    if not plan_text:
+        raise HTTPException(status_code=400, detail="没有找到方案正文，请先提交方案")
+
+    graph = request.app.state.review_agent
+    if graph is None:
+        raise HTTPException(status_code=503, detail="评审会智能体还没就绪，请稍后再试")
+
+    async def generate():
+        try:
+            async for event in graph.run(
+                plan_text, session_id, max_round=max_round, plan_elements=elements
+            ):
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            # 会议中途出错也要把错误推给前端，否则界面会一直转圈
+            print(f"-----------评审会异常：{e}------------")
+            err = {"event": "error", "message": str(e)[:200]}
+            yield f"data: {json.dumps(err, ensure_ascii=False)}\n\n"
+        # 结束标记，事件源协议里前端靠它关连接
+        yield f"data: {json.dumps({'event': 'done'}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            # 关掉反向代理的缓冲，否则事件会被攒着一起发，看不到实时效果
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )

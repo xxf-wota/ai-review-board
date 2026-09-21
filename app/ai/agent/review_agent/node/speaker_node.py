@@ -3,8 +3,8 @@ import re
 from langchain.agents import create_agent
 from langchain.agents.middleware import ModelCallLimitMiddleware
 from langchain_core.messages import AIMessage, HumanMessage
-from langgraph.config import get_stream_writer
 
+from app.ai.agent.review_agent import events
 from app.ai.agent.review_agent.node.extract_node import format_elements
 from app.ai.agent.review_agent.state.review_state import ReviewState
 from app.ai.model.my_model import MyModel
@@ -95,7 +95,9 @@ async def speaker_node(state: ReviewState):
         history = f"你上一轮已经问过：{history}"
 
     user_msg = {"messages": [HumanMessage(content=_build_input(plan_elements, history))]}
-    writer = get_stream_writer()
+    name = REVIEWER_NAMES.get(role, role)
+    # 先告诉前端"谁要开始说话了"，前端据此开一个气泡
+    events.speaker_start(role, name, "main")
     result = []
     try:
         agent = _build_agent(role, MyModel.get_local_model())
@@ -106,7 +108,7 @@ async def speaker_node(state: ReviewState):
     async for chunk, metadata in agent.astream(user_msg, stream_mode="messages"):
         if chunk.content:
             result.append(chunk.content)
-            writer(chunk.content)
+            events.token(role, chunk.content)
 
     question = first_question("".join(result))
     # 模型没吐出内容时兜底，避免会议直接卡死
@@ -128,8 +130,10 @@ async def speaker_node(state: ReviewState):
         "severity": 0,
         "followup_depth": state.get("followup_depth", 0),
     })
+    # 发言结束，把完整问题一次性告诉前端
+    events.speaker_end(role, name, question, "main")
     return {
-        "messages": [AIMessage(content=f"\n【{REVIEWER_NAMES.get(role, role)}】{question}\n")],
+        "messages": [AIMessage(content=f"\n【{name}】{question}\n")],
         "pending_question": question,
         "pending_type": "main",
         # 发言完进入接话判定；M4 接上学生回答后，这里会先转到"等学生回答"

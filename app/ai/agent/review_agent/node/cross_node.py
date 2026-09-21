@@ -1,8 +1,8 @@
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ProviderStrategy
 from langchain_core.messages import AIMessage, HumanMessage
-from langgraph.config import get_stream_writer
 
+from app.ai.agent.review_agent import events
 from app.ai.agent.review_agent.node.extract_node import format_elements
 from app.ai.agent.review_agent.node.speaker_node import (
     PROMPTS,
@@ -148,7 +148,6 @@ async def cross_node(state: ReviewState):
     )
     user_msg = {"messages": [HumanMessage(content=content)]}
 
-    writer = get_stream_writer()
     # 人设 + 接话表达规则，后者在后，用来覆盖人设里"只提一个问题"的格式要求
     system_prompt = f"{PROMPTS[role]}\n\n{speak_prompt}"
     # 这里用 ainvoke，不用 astream：
@@ -198,8 +197,10 @@ async def cross_node(state: ReviewState):
     # 模型没吐出内容时兜底：拿判定阶段整理的理由顶上，并写清是针对谁说的
     if not text:
         text = f"{target_name}刚才的说法，{pick.get('point') or '还需要补充依据'}。"
-    # 一次性推给前端，前端按"谁接了谁的话"渲染气泡
-    writer(text)
+    # 一次性推给前端；带上"接的是谁"，前端才能画出那个箭头
+    events.speaker_start(role, who, "cross", target, target_name)
+    events.token(role, text)
+    events.speaker_end(role, who, text, "cross", target, target_name)
     log = list(question_log)
     log.append({
         "round": state.get("round", 1),

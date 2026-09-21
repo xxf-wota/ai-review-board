@@ -8,12 +8,15 @@ M3 验收：评审会的调度与交叉质询
 分开验证是故意的：如果两个一起测，出问题时分不清是调度错了还是接话判定错了
 """
 import asyncio
+import json
 import os
 import sys
+from collections import Counter
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
+from fastapi.testclient import TestClient  # noqa: E402
 from langgraph.checkpoint.memory import InMemorySaver  # noqa: E402
 
 from app.ai.agent.review_agent.graph.review_graph import ReviewGraph  # noqa: E402
@@ -22,6 +25,7 @@ from app.ai.agent.review_agent.node.manager_node import (  # noqa: E402
     MAX_CROSS_TOTAL,
 )
 from app.ai.agent.review_agent.node.speaker_node import REVIEWER_NAMES  # noqa: E402
+from app.main import app  # noqa: E402
 
 REPORT = os.path.join(ROOT, "data", "_m3_check.txt")
 PLAN = os.path.join(ROOT, "data", "demo_plan.txt")
@@ -115,6 +119,67 @@ async def scenario_b(plan_text):
     return bool(cross_items) and not over_total and len(cross_items) <= cap and not bad_target
 
 
+def scenario_c(plan_text):
+    """场景 C：走 SSE 接口，验证事件是否按顺序推出来"""
+    log("\n" + "-" * 70)
+    log("场景 C：SSE 接口 /review/meeting/stream")
+    log("-" * 70)
+
+    events = []
+    with TestClient(app) as client:
+        with client.stream(
+            "POST", "/review/meeting/stream",
+            json={"plan_text": plan_text, "max_round": 1},
+        ) as resp:
+            log(f"  状态码：{resp.status_code}")
+            log(f"  content-type：{resp.headers.get('content-type')}")
+            for line in resp.iter_lines():
+                # SSE 每条消息形如 "data: {...}"
+                if not line or not line.startswith("data: "):
+                    continue
+                events.append(json.loads(line[6:]))
+
+    kinds = [e.get("event") for e in events]
+    log(f"\n  共收到 {len(events)} 个事件")
+    log(f"  类型统计：{dict(Counter(kinds))}")
+
+    # 把发言时间线打印出来，接话用箭头标出反驳对象
+    log("\n  发言时间线：")
+    for e in events:
+        if e.get("event") != "speaker_end":
+            continue
+        if e.get("question_type") == "cross":
+            log(f"    【{e.get('name')}】⟶ 接话 → {e.get('target_name')}")
+        else:
+            log(f"    【{e.get('name')}】主问题")
+        log(f"        {e.get('question')}")
+
+    log("\n  检查项：")
+    ok_first = bool(kinds) and kinds[0] == "meeting_start"
+    log(f"    第一个事件是 meeting_start：{'通过' if ok_first else '不通过，实际 ' + str(kinds[:1])}")
+
+    ok_elements = "elements" in kinds
+    log(f"    有 elements 事件（要素表）：{'通过' if ok_elements else '不通过'}")
+
+    ok_token = "token" in kinds
+    log(f"    有 token 事件（流式吐字）：{'通过' if ok_token else '不通过'}")
+
+    pairs = kinds.count("speaker_start") == kinds.count("speaker_end")
+    log(f"    speaker_start 与 speaker_end 数量一致：{'通过' if pairs else '不通过'}"
+        f"（{kinds.count('speaker_start')} / {kinds.count('speaker_end')}）")
+
+    cross_ends = [e for e in events
+                  if e.get("event") == "speaker_end" and e.get("question_type") == "cross"]
+    ok_arrow = bool(cross_ends) and all(e.get("target") and e.get("target_name") for e in cross_ends)
+    log(f"    每次接话都带箭头信息（谁接谁）：{'通过' if ok_arrow else '不通过'}"
+        f"，接话 {len(cross_ends)} 次")
+
+    ok_end = "meeting_end" in kinds and kinds and kinds[-1] == "done"
+    log(f"    meeting_end 且以 done 收尾：{'通过' if ok_end else '不通过，实际结尾 ' + str(kinds[-2:])}")
+
+    return ok_first and ok_elements and ok_token and pairs and ok_arrow and ok_end
+
+
 async def main():
     log("=" * 70)
     log("M3 验收：评审会调度 + 交叉质询")
@@ -126,12 +191,14 @@ async def main():
 
     a_ok = await scenario_a(plan_text)
     b_ok = await scenario_b(plan_text)
+    c_ok = scenario_c(plan_text)
 
     log("\n" + "=" * 70)
     log("M3 结论")
     log("=" * 70)
     log(f"  场景 A 调度：{'通过' if a_ok else '不通过'}")
     log(f"  场景 B 交叉质询：{'通过' if b_ok else '不通过'}")
+    log(f"  场景 C SSE 接口：{'通过' if c_ok else '不通过'}")
 
 
 if __name__ == "__main__":

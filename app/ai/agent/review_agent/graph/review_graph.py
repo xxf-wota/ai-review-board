@@ -13,13 +13,16 @@ AI 交叉质询评审团
 """
 
 
-def build_init_state(plan_text: str, max_round: int = 1, max_cross_total=None) -> dict:
+def build_init_state(plan_text: str, max_round: int = 1, max_cross_total=None,
+                     plan_elements: dict = None) -> dict:
     """会议开场时的初始状态，所有计数器显式清零，不依赖默认值"""
+    # 提交方案时已经抽过要素了，这里直接复用，省掉一次十几秒的抽取
+    has_elements = bool(plan_elements)
     state = {
         "messages": [HumanMessage(content=plan_text)],
         "plan_text": plan_text,
-        "plan_elements": {},
-        "meeting_phase": "extract",
+        "plan_elements": plan_elements or {},
+        "meeting_phase": "main" if has_elements else "extract",
         "round": 1,
         "max_round": max_round,
         "speaker_order": list(DEFAULT_ORDER),
@@ -67,25 +70,33 @@ class ReviewGraph:
         self.agent = graph.compile(checkpointer=self.memory)
         return self.agent
 
-    # 开一场评审会，流式吐出模型文字和自定义事件
-    async def run(self, plan_text, session_id, max_round=1, max_cross_total=None):
-        init_state = build_init_state(plan_text, max_round, max_cross_total)
+    # 开一场评审会，只往外推结构化事件
+    # 不推 messages 流：节点里已经把每个字都包成 token 事件了，再推一遍就重复了
+    async def run(self, plan_text, session_id, max_round=1, max_cross_total=None,
+                  plan_elements=None):
+        init_state = build_init_state(plan_text, max_round, max_cross_total, plan_elements)
         config = {"configurable": {"thread_id": session_id}}
-        # 与聊天一致：同时订阅 messages 和 custom
-        # messages 拿模型流式文字，custom 拿节点里 writer() 推的自定义内容
-        async for mode, chunk in self.agent.astream(
-            init_state, config=config, stream_mode=["messages", "custom"]
-        ):
-            if mode == "messages":
-                message, metadata = chunk
-                if message.content:
-                    yield message.content
-            elif mode == "custom":
+
+        yield {"event": "meeting_start", "session_id": session_id, "max_round": max_round}
+
+        async for chunk in self.agent.astream(init_state, config=config, stream_mode="custom"):
+            # 节点里通过 events.emit 推出来的字典
+            if isinstance(chunk, dict):
                 yield chunk
 
+        # 会议结束后从检查点里取最终状态，把纪要需要的数据一并交给前端
+        snapshot = await self.agent.aget_state(config)
+        values = snapshot.values or {}
+        yield {
+            "event": "meeting_end",
+            "cross_total": values.get("cross_total", 0),
+            "question_log": values.get("question_log") or [],
+        }
+
     # 跑完整场会议并返回最终状态，供验收脚本检查调度结果
-    async def run_get_state(self, plan_text, session_id, max_round=1, max_cross_total=None):
-        init_state = build_init_state(plan_text, max_round, max_cross_total)
+    async def run_get_state(self, plan_text, session_id, max_round=1, max_cross_total=None,
+                            plan_elements=None):
+        init_state = build_init_state(plan_text, max_round, max_cross_total, plan_elements)
         config = {"configurable": {"thread_id": session_id}}
         return await self.agent.ainvoke(init_state, config=config)
 

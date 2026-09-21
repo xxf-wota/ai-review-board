@@ -5,6 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from app.web.websocket_router.websocket_router import wb_router
 from contextlib import asynccontextmanager
 from app.ai.agent.multi_agent.graph.exam_graph import ExamGraph
+from app.ai.agent.review_agent.graph.review_graph import ReviewGraph
 from app.web.default_page_router.default_page_router import default_page_router
 from app.web.review_router.review_router import review_router
 from langgraph.checkpoint.memory import InMemorySaver
@@ -16,9 +17,13 @@ async def content_manager(app: FastAPI):
     memory = InMemorySaver()
     app.state.exam_agent = ExamGraph(memory)
     print("AI模拟面试智能体启动成功")
+    # 评审会复用同一套检查点机制
+    app.state.review_agent = ReviewGraph(InMemorySaver())
+    print("AI交叉质询评审团启动成功")
     yield
     # 消耗对象
     app.state.exam_agent = None
+    app.state.review_agent = None
     print("AI模拟面试智能体关闭成功")
 
 
