@@ -52,7 +52,7 @@ def _build_agent(model):
     return create_agent(
         model=model,
         system_prompt=prompt,
-        # 与项目原有节点保持一致的写法，本地 qwen2.5:7b 支持这种原生结构化输出
+        # 与项目原有节点保持一致的写法，本地 qwen2.5:7b 支持这种原生结构化输出，qwen3.5:9b 不支持
         response_format=ProviderStrategy(schema=PlanElementsSchema),
         middleware=[
             ModelCallLimitMiddleware(

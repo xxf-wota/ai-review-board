@@ -44,6 +44,11 @@ class ReviewState(TypedDict):
     cross_total: int
     # 本议题已发过言的评审，防同一人连说
     spoke_in_issue: list[str]
+    # 本议题是否已经做过接话判定，防止没人接话时在 manager 和 cross 之间死循环
+    cross_checked: bool
+    # 接话上限，允许按场次覆盖。注意：没在这里声明的字段会被 LangGraph 直接丢掉
+    max_cross_per_issue: int
+    max_cross_total: int
     # ---------- 产出 ----------
     # 全部质询记录
     question_log: list[dict[str, Any]]

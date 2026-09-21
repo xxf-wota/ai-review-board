@@ -1,3 +1,5 @@
+import re
+
 from langchain.agents import create_agent
 from langchain.agents.middleware import ModelCallLimitMiddleware
 from langchain_core.messages import AIMessage, HumanMessage
@@ -26,6 +28,13 @@ REVIEWER_NAMES = {
     "cost": "成本与进度评审",
     "compliance": "合规与伦理评审",
     "user": "用户与价值评审",
+}
+# 各评审的关注点。接话时要把它直接写进提示，否则弱模型容易问成别人的关注点
+REVIEWER_CONCERNS = {
+    "tech": "技术可行性、是否过度设计、有没有更简单的替代方案、关键难点能否落地",
+    "cost": "预算是否够、接口调用费用、人力是否够、周期是否现实",
+    "compliance": "数据来源是否合法、用户隐私、是否取得授权、算法偏见",
+    "user": "谁真的会用、相比现有方案的优势、是不是伪需求",
 }
 # 提示词只读一次，避免每次发言都读盘
 PROMPTS = {role: BuilderPromptYaml.get_prompt(f) for role, f in REVIEWER_FILES.items()}
@@ -59,6 +68,8 @@ def first_question(text: str) -> str:
     text = (text or "").strip().replace("?", "？")
     if "？" in text:
         text = text.split("？")[0] + "？"
+    # 模型偶发吐出"。。""！！"这类重复标点，压成一个
+    text = re.sub(r"([。！？])[。！？]+", r"\1", text)
     return text.strip()
 
 
@@ -101,10 +112,29 @@ async def speaker_node(state: ReviewState):
     # 模型没吐出内容时兜底，避免会议直接卡死
     if not question:
         question = "请补充说明方案中最关键的风险以及你的应对措施。"
+    # 登记本议题已发过言的人，接话判定时要把他排除掉，避免同一个人连说
+    spoke = list(state.get("spoke_in_issue") or [])
+    if role not in spoke:
+        spoke.append(role)
+    # 登记发言记录，前端时间线和后续落库都靠它
+    log = list(state.get("question_log") or [])
+    log.append({
+        "round": state.get("round", 1),
+        "speaker_role": role,
+        "question_type": state.get("pending_type") or "main",
+        "target_speaker": "",
+        "question": question,
+        "verdict": "",
+        "severity": 0,
+        "followup_depth": state.get("followup_depth", 0),
+    })
     return {
         "messages": [AIMessage(content=f"\n【{REVIEWER_NAMES.get(role, role)}】{question}\n")],
         "pending_question": question,
         "pending_type": "main",
-        # 抛出问题后进入判定阶段，由 manager 决定是结束等学生回答还是继续
-        "meeting_phase": "judge",
+        # 发言完进入接话判定；M4 接上学生回答后，这里会先转到"等学生回答"
+        "meeting_phase": "cross",
+        "cross_checked": False,
+        "spoke_in_issue": spoke,
+        "question_log": log,
     }
