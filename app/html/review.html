@@ -290,11 +290,11 @@
 
         .field .v.absent { color: var(--vermilion); font-family: var(--serif); }
 
-        /* 缺失项：本系统的立命之点，用朱红标出来 */
+        /* 缺失项：本系统的立命之点，用朱红标出来，放在侧栏最前面 */
         .missing {
-            margin-top: 20px;
-            padding-top: 14px;
-            border-top: 1px dashed var(--rule);
+            margin: 0 0 18px;
+            padding-bottom: 14px;
+            border-bottom: 1px dashed var(--rule);
         }
 
         .missing .k {
@@ -519,6 +519,15 @@
             </div>
 
             <template v-else>
+                <!-- 缺失项放在最前面：这是整个系统最核心的信息，
+                     评审问的就是这些，不能让它在折叠线以下 -->
+                <div class="missing" v-if="elements.missing && elements.missing.length">
+                    <span class="k">方案缺失项</span>
+                    <div class="tags">
+                        <span v-for="m in elements.missing" :key="m">{{ m }}</span>
+                    </div>
+                </div>
+
                 <div class="field">
                     <span class="k">项目目标</span>
                     <p class="v">{{ elements.goal }}</p>
@@ -549,13 +558,6 @@
                     <span class="k">目标用户</span>
                     <p class="v">{{ elements.users }}</p>
                 </div>
-
-                <div class="missing" v-if="elements.missing && elements.missing.length">
-                    <span class="k">方案缺失项</span>
-                    <div class="tags">
-                        <span v-for="m in elements.missing" :key="m">{{ m }}</span>
-                    </div>
-                </div>
             </template>
         </aside>
     </div>
@@ -563,7 +565,7 @@
     <!-- 底部：方案提交 -->
     <footer class="composer">
         <div class="inner">
-            <textarea v-model="planText" :disabled="running"
+            <textarea v-model="planText" v-show="!running"
                       placeholder="把开题 / 大创 / 竞赛方案粘贴到这里，或点右边上传 Word、PDF、txt…"></textarea>
             <div class="row">
                 <label class="file-label">
@@ -606,7 +608,8 @@
             running: false,
             error: '',
             status: '',
-            summary: null
+            summary: null,
+            scrollTimer: null
         },
         computed: {
             // 已经发过言的评审，用来点亮顶部的席位
@@ -632,6 +635,29 @@
             },
             isAbsent: function (v) {
                 return !v || v.indexOf('未提及') >= 0;
+            },
+
+            // 有新发言时滚到底部，否则气泡会堆到屏幕外，演示时要一直手动滚
+            // .stage 留了 200px 底部内边距，所以滚到底是让最后一条浮在输入框上方
+            scrollToLatest: function () {
+                this.$nextTick(function () {
+                    window.scrollTo({
+                        top: document.documentElement.scrollHeight,
+                        behavior: 'smooth'
+                    });
+                });
+            },
+
+            // 流式吐字时也要跟着滚：文字是一点点长出来的，
+            // 只在气泡创建时滚一次的话，长完就超到屏幕外面去了。
+            // 节流一下，别每个字都触发滚动
+            scrollToLatestSoon: function () {
+                var self = this;
+                if (this.scrollTimer) return;
+                this.scrollTimer = setTimeout(function () {
+                    self.scrollTimer = null;
+                    self.scrollToLatest();
+                }, 400);
             },
 
             // ---------- 上传文件 ----------
@@ -748,14 +774,17 @@
                     };
                     this.utterances.push(item);
                     this.current = item;
+                    this.scrollToLatest();
                 } else if (e.event === 'token') {
                     if (this.current) this.current.text += e.text;
+                    this.scrollToLatestSoon();
                 } else if (e.event === 'speaker_end') {
                     if (this.current) {
                         this.current.text = e.question;
                         this.current.streaming = false;
                         this.current = null;
                     }
+                    this.scrollToLatest();
                 } else if (e.event === 'meeting_end') {
                     // 从发言记录里统计，比前端自己数更可靠
                     var log = e.question_log || [];

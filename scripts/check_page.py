@@ -7,6 +7,7 @@
 """
 import os
 import re
+import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -108,6 +109,23 @@ def main():
         log(f"    模板里用了 {len(used)} 个根标识符：{sorted(used)}")
         log(f"    未定义的：{unknown if unknown else '无'}")
 
+        # 3.5) JS 语法检查：手写页面最容易犯的就是语法错误，一错整个页面直接白屏，
+        # 而且浏览器不一定把错误说清楚。用 node --check 只做语法校验，不执行代码
+        script = html.rsplit("<script>", 1)[1].split("</script>")[0]
+        # 临时文件放 .git 下：那个目录永远不会被提交，不用污染 .gitignore
+        js_tmp = os.path.join(ROOT, ".git", "_page_check.js")
+        err_tmp = os.path.join(ROOT, ".git", "_page_check.err")
+        with open(js_tmp, "w", encoding="utf-8") as f:
+            f.write(script)
+        # stderr 重定向到文件而不是管道：沙箱不允许子进程走管道
+        with open(err_tmp, "w", encoding="utf-8") as errf:
+            proc = subprocess.run(["node", "--check", js_tmp], stdout=errf, stderr=errf)
+        ok_js = proc.returncode == 0
+        log(f"\n  JS 语法检查（node --check）：{'通过' if ok_js else '不通过'}")
+        if not ok_js:
+            with open(err_tmp, encoding="utf-8") as f:
+                log("    " + f.read().strip()[:500])
+
         # 4) 前后端对账：页面调用的接口，后端是否都在
         spec = client.get("/openapi.json").json()
         paths = set(spec.get("paths", {}).keys())
@@ -128,6 +146,7 @@ def main():
     log("=" * 70)
     log(f"  /review 跳转          ：{'通过' if ok_route else '不通过'}")
     log(f"  页面可取到且标记齐全  ：{'通过' if ok_file else '不通过'}")
+    log(f"  JS 语法               ：{'通过' if ok_js else '不通过'}")
     log(f"  模板变量全部有定义    ：{'通过' if not unknown else '不通过，未定义 ' + str(unknown)}")
     log(f"  前后端接口对账        ：{'通过' if not bad else '不通过，缺失 ' + str(bad)}")
 
