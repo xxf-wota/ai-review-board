@@ -2,7 +2,7 @@ import json
 from uuid import uuid4
 
 from fastapi import APIRouter, Body, File, HTTPException, Request, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 
 from app.ai.agent.review_agent.node.extract_node import extract_elements, format_elements
 from app.ai.tool.plan_parser import parse_plan_bytes
@@ -140,3 +140,9 @@ async def meeting_stream(request: Request, payload: dict = Body(...)):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# 评审会页面。放在自己的路由里，就不用再去改默认页面路由那个文件
+@review_router.get("")
+def review_page():
+    return RedirectResponse(url="/static/review.html")

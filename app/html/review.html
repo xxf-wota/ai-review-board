@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 交叉质询评审团</title>
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.7.14/dist/vue.js"></script>
+    <style>
+        /* ==========================================================
+           设计方向：档案纸 + 朱红批注
+           本体是一场正式评审会，所以用暖色档案纸做底、墨色做正文，
+           朱红是唯一的强调色，只用在两处：方案缺失项、质询印章
+           四位评审用四种传统色区分，避免通用配色
+           ========================================================== */
+        :root {
+            --paper: #f4efe4;
+            --card: #fbf8f1;
+            --ink: #23201c;
+            --ink-2: #6b6357;
+            --ink-3: #9a9184;
+            --rule: #ded5c4;
+            --vermilion: #b23a2f;
+            --vermilion-soft: #f2e0dc;
+            /* 四位评审的专用色 */
+            --tech: #3a5a8c;
+            --cost: #a8722a;
+            --compliance: #6b4a7a;
+            --user: #4f6b4a;
+            --serif: "Songti SC", "Noto Serif SC", "Source Han Serif SC", SimSun, serif;
+            --sans: "PingFang SC", "Noto Sans SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif;
+            --mono: "SFMono-Regular", Consolas, "Courier New", monospace;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            font-family: var(--sans);
+            color: var(--ink);
+            background:
+                radial-gradient(circle at 12% 8%, rgba(178, 58, 47, .05), transparent 42%),
+                radial-gradient(circle at 88% 82%, rgba(58, 90, 140, .06), transparent 45%),
+                var(--paper);
+            min-height: 100vh;
+        }
+
+        /* 纸张纹理：极淡的横向纤维，纯 CSS，不依赖图片 */
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background-image: repeating-linear-gradient(
+                0deg, rgba(35, 32, 28, .014) 0 1px, transparent 1px 3px);
+            z-index: 0;
+        }
+
+        #app { position: relative; z-index: 1; }
+
+        /* ---------------- 页头 ---------------- */
+        .masthead {
+            border-bottom: 2px solid var(--ink);
+            padding: 22px 32px 16px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 24px;
+            flex-wrap: wrap;
+        }
+
+        .masthead h1 {
+            font-family: var(--serif);
+            font-size: 30px;
+            letter-spacing: 3px;
+            margin: 0;
+            font-weight: 700;
+        }
+
+        .masthead .sub {
+            margin: 6px 0 0;
+            font-size: 13px;
+            color: var(--ink-2);
+            letter-spacing: .5px;
+        }
+
+        .masthead .sub b { color: var(--vermilion); font-weight: 600; }
+
+        /* 会议状态：四位评审的点，已发言的点亮 */
+        .panel-status { display: flex; align-items: center; gap: 14px; }
+        .panel-status .label {
+            font-family: var(--mono);
+            font-size: 11px;
+            color: var(--ink-3);
+            letter-spacing: 1px;
+        }
+        .seats { display: flex; gap: 8px; }
+        .seat {
+            width: 12px; height: 12px; border-radius: 50%;
+            border: 1.5px solid var(--rule);
+            background: transparent;
+            transition: all .4s ease;
+        }
+        .seat.on { border-color: currentColor; background: currentColor; box-shadow: 0 0 0 4px rgba(0,0,0,.04); }
+        .seat.s0 { color: var(--tech); }
+        .seat.s1 { color: var(--cost); }
+        .seat.s2 { color: var(--compliance); }
+        .seat.s3 { color: var(--user); }
+
+        /* ---------------- 主体两栏 ---------------- */
+        .layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 340px;
+            gap: 0;
+            align-items: start;
+            max-width: 1360px;
+            margin: 0 auto;
+        }
+
+        /* ---------------- 发言区 ---------------- */
+        .stage {
+            padding: 28px 32px 200px;
+            min-height: 60vh;
+        }
+
+        .empty-stage {
+            text-align: center;
+            color: var(--ink-3);
+            padding: 90px 20px;
+            font-family: var(--serif);
+            font-size: 15px;
+            letter-spacing: 1px;
+        }
+
+        .empty-stage .big {
+            font-size: 46px;
+            color: var(--rule);
+            margin-bottom: 18px;
+            font-family: var(--serif);
+        }
+
+        /* 发言气泡：档案卡片 */
+        .bubble {
+            position: relative;
+            background: var(--card);
+            border: 1px solid var(--rule);
+            border-left: 4px solid var(--rule);
+            padding: 16px 20px 18px;
+            margin-bottom: 16px;
+            box-shadow: 0 1px 0 rgba(35,32,28,.04), 0 6px 18px -12px rgba(35,32,28,.35);
+            animation: rise .38s cubic-bezier(.22,.68,.32,1) both;
+        }
+
+        @keyframes rise {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: none; }
+        }
+
+        .bubble.r-tech { border-left-color: var(--tech); }
+        .bubble.r-cost { border-left-color: var(--cost); }
+        .bubble.r-compliance { border-left-color: var(--compliance); }
+        .bubble.r-user { border-left-color: var(--user); }
+
+        .bubble header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 8px;
+        }
+
+        .bubble .who {
+            font-family: var(--serif);
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+        .bubble.r-tech .who { color: var(--tech); }
+        .bubble.r-cost .who { color: var(--cost); }
+        .bubble.r-compliance .who { color: var(--compliance); }
+        .bubble.r-user .who { color: var(--user); }
+
+        .bubble .tag {
+            font-family: var(--mono);
+            font-size: 10px;
+            letter-spacing: 1px;
+            color: var(--ink-3);
+            border: 1px solid var(--rule);
+            padding: 1px 6px;
+        }
+
+        .bubble p {
+            margin: 0;
+            font-size: 15px;
+            line-height: 1.85;
+        }
+
+        /* 流式输出时的光标 */
+        .bubble.streaming p::after {
+            content: "▍";
+            color: var(--vermilion);
+            animation: blink .9s steps(2) infinite;
+            margin-left: 1px;
+        }
+        @keyframes blink { 50% { opacity: 0; } }
+
+        /* ---------- 交叉质询：整个界面的主角 ---------- */
+        .bubble.cross {
+            border-left-width: 6px;
+            border-left-color: var(--vermilion);
+            background: linear-gradient(180deg, var(--vermilion-soft), var(--card) 55%);
+        }
+
+        .bubble.cross .who { color: var(--vermilion); }
+
+        /* 接话指向：一眼看出"谁接了谁的话" */
+        .bubble .arrow {
+            font-family: var(--sans);
+            font-size: 12.5px;
+            color: var(--vermilion);
+            border-bottom: 1px dashed var(--vermilion);
+            padding-bottom: 1px;
+        }
+
+        /* 朱红印章，压住右上角 */
+        .bubble .stamp {
+            position: absolute;
+            top: 10px;
+            right: 14px;
+            font-family: var(--serif);
+            font-size: 12px;
+            letter-spacing: 2px;
+            color: var(--vermilion);
+            border: 1.5px solid var(--vermilion);
+            padding: 3px 7px 3px 9px;
+            transform: rotate(-7deg);
+            opacity: .78;
+            animation: stampin .5s cubic-bezier(.2,1.4,.4,1) both;
+        }
+
+        @keyframes stampin {
+            from { opacity: 0; transform: rotate(-7deg) scale(1.9); }
+            to { opacity: .78; transform: rotate(-7deg) scale(1); }
+        }
+
+        /* ---------------- 右侧档案栏 ---------------- */
+        .dossier {
+            border-left: 1px solid var(--rule);
+            padding: 28px 24px 40px;
+            position: sticky;
+            top: 0;
+            max-height: 100vh;
+            overflow-y: auto;
+            background: rgba(251, 248, 241, .55);
+        }
+
+        .dossier h2 {
+            font-family: var(--serif);
+            font-size: 15px;
+            letter-spacing: 2px;
+            margin: 0 0 4px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--ink);
+        }
+
+        .dossier .hint {
+            font-size: 11.5px;
+            color: var(--ink-3);
+            margin: 8px 0 16px;
+            line-height: 1.6;
+        }
+
+        .field { margin-bottom: 14px; }
+
+        .field .k {
+            font-family: var(--mono);
+            font-size: 10.5px;
+            letter-spacing: 1px;
+            color: var(--ink-3);
+            display: block;
+            margin-bottom: 3px;
+        }
+
+        .field .v {
+            font-size: 13.5px;
+            line-height: 1.7;
+            margin: 0;
+            word-break: break-word;
+        }
+
+        .field .v.absent { color: var(--vermilion); font-family: var(--serif); }
+
+        /* 缺失项：本系统的立命之点，用朱红标出来 */
+        .missing {
+            margin-top: 20px;
+            padding-top: 14px;
+            border-top: 1px dashed var(--rule);
+        }
+
+        .missing .k {
+            font-family: var(--mono);
+            font-size: 10.5px;
+            letter-spacing: 1px;
+            color: var(--vermilion);
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        .missing .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+
+        .missing .tags span {
+            font-size: 12px;
+            color: var(--vermilion);
+            background: var(--vermilion-soft);
+            border: 1px solid rgba(178,58,47,.28);
+            padding: 2px 8px;
+        }
+
+        /* ---------------- 底部方案提交 ---------------- */
+        .composer {
+            position: fixed;
+            left: 0; right: 0; bottom: 0;
+            border-top: 2px solid var(--ink);
+            background: rgba(244, 239, 228, .96);
+            backdrop-filter: blur(6px);
+            padding: 14px 32px 16px;
+            z-index: 20;
+        }
+
+        .composer .inner { max-width: 1360px; margin: 0 auto; }
+
+        .composer textarea {
+            width: 100%;
+            height: 74px;
+            resize: vertical;
+            font-family: var(--sans);
+            font-size: 13.5px;
+            line-height: 1.7;
+            color: var(--ink);
+            background: var(--card);
+            border: 1px solid var(--rule);
+            padding: 10px 12px;
+            outline: none;
+        }
+
+        .composer textarea:focus { border-color: var(--ink-2); }
+
+        .composer .row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            font-family: var(--sans);
+            font-size: 13.5px;
+            letter-spacing: 1px;
+            padding: 9px 20px;
+            border: 1.5px solid var(--ink);
+            background: transparent;
+            color: var(--ink);
+            cursor: pointer;
+            transition: all .18s ease;
+        }
+
+        .btn:hover:not(:disabled) { background: var(--ink); color: var(--paper); }
+        .btn:disabled { opacity: .35; cursor: not-allowed; }
+
+        .btn.primary {
+            background: var(--vermilion);
+            border-color: var(--vermilion);
+            color: #fff;
+        }
+
+        .btn.primary:hover:not(:disabled) { background: #97302a; border-color: #97302a; color: #fff; }
+
+        .file-label {
+            font-size: 12.5px;
+            color: var(--ink-2);
+            border: 1px dashed var(--rule);
+            padding: 8px 14px;
+            cursor: pointer;
+        }
+
+        .file-label:hover { border-color: var(--ink-2); color: var(--ink); }
+        .file-label input { display: none; }
+
+        .status {
+            font-family: var(--mono);
+            font-size: 11.5px;
+            color: var(--ink-3);
+            margin-left: auto;
+            letter-spacing: .5px;
+        }
+
+        .status.err { color: var(--vermilion); }
+
+        /* ---------------- 会议小结 ---------------- */
+        .wrapup {
+            border: 1.5px solid var(--ink);
+            background: var(--card);
+            padding: 18px 22px;
+            margin: 24px 0 0;
+            animation: rise .4s ease both;
+        }
+
+        .wrapup h3 {
+            font-family: var(--serif);
+            font-size: 16px;
+            letter-spacing: 2px;
+            margin: 0 0 12px;
+        }
+
+        .wrapup .stats { display: flex; gap: 28px; flex-wrap: wrap; }
+        .wrapup .stat .n {
+            font-family: var(--serif);
+            font-size: 26px;
+            line-height: 1;
+            color: var(--vermilion);
+        }
+        .wrapup .stat .t {
+            font-size: 11.5px;
+            color: var(--ink-2);
+            margin-top: 5px;
+            letter-spacing: .5px;
+        }
+
+        @media (max-width: 1000px) {
+            .layout { grid-template-columns: 1fr; }
+            .dossier { position: static; max-height: none; border-left: none; border-top: 1px solid var(--rule); }
+            .masthead, .stage, .composer { padding-left: 18px; padding-right: 18px; }
+        }
+    </style>
+</head>
+<body>
+<div id="app">
+
+    <!-- 页头 -->
+    <header class="masthead">
+        <div>
+            <h1>AI 交叉质询评审团</h1>
+            <p class="sub">
+                提交你的方案，四位 AI 评审轮流质询 ——
+                <b>并且互相接话</b>
+            </p>
+        </div>
+        <div class="panel-status">
+            <span class="label">评审席</span>
+            <div class="seats">
+                <i v-for="(r, i) in reviewers" :key="r.role"
+                   class="seat" :class="['s' + i, { on: spokenRoles.indexOf(r.role) >= 0 }]"
+                   :title="r.name"></i>
+            </div>
+        </div>
+    </header>
+
+    <div class="layout">
+        <!-- 发言区 -->
+        <section class="stage">
+            <div v-if="!utterances.length" class="empty-stage">
+                <div class="big">案</div>
+                <div>还没有开始评审</div>
+                <div style="margin-top:10px;font-size:13px;">
+                    把方案粘贴到下方，或上传 Word / PDF
+                </div>
+            </div>
+
+            <article v-for="(u, i) in utterances" :key="i"
+                     class="bubble"
+                     :class="['r-' + u.role, { cross: u.questionType === 'cross', streaming: u.streaming }]">
+
+                <div v-if="u.questionType === 'cross'" class="stamp">质询</div>
+
+                <header>
+                    <span class="who">{{ u.name }}</span>
+                    <span v-if="u.questionType === 'cross'" class="arrow">
+                        ⟶ 接 {{ u.targetName }} 的话
+                    </span>
+                    <span v-else class="tag">主问题</span>
+                </header>
+
+                <p>{{ u.text }}</p>
+            </article>
+
+            <!-- 会议小结 -->
+            <div v-if="summary" class="wrapup">
+                <h3>本次评审会</h3>
+                <div class="stats">
+                    <div class="stat">
+                        <div class="n">{{ summary.mainCount }}</div>
+                        <div class="t">主问题</div>
+                    </div>
+                    <div class="stat">
+                        <div class="n">{{ summary.crossCount }}</div>
+                        <div class="t">交叉质询</div>
+                    </div>
+                    <div class="stat">
+                        <div class="n">{{ summary.roles.length }}</div>
+                        <div class="t">位评审发言</div>
+                    </div>
+                </div>
+                <p style="margin:14px 0 0;font-size:13px;color:var(--ink-2);line-height:1.8;">
+                    会议纪要、未答好清单与四维能力雷达图将在后续阶段接入。
+                </p>
+            </div>
+        </section>
+
+        <!-- 右侧档案栏 -->
+        <aside class="dossier">
+            <h2>方案要素表</h2>
+            <p class="hint">
+                评审只基于这张表提问，所以<b>表里缺什么，评审就会问什么</b>。
+            </p>
+
+            <div v-if="!elements" class="hint" style="color:var(--ink-3);">
+                提交方案后显示
+            </div>
+
+            <template v-else>
+                <div class="field">
+                    <span class="k">项目目标</span>
+                    <p class="v">{{ elements.goal }}</p>
+                </div>
+                <div class="field">
+                    <span class="k">技术方案</span>
+                    <p class="v">{{ listText(elements.tech) }}</p>
+                </div>
+                <div class="field">
+                    <span class="k">预算与资源</span>
+                    <p class="v" :class="{ absent: isAbsent(elements.budget) }">{{ elements.budget }}</p>
+                </div>
+                <div class="field">
+                    <span class="k">进度安排</span>
+                    <p class="v" :class="{ absent: isAbsent(elements.schedule) }">{{ elements.schedule }}</p>
+                </div>
+                <div class="field">
+                    <span class="k">风险应对</span>
+                    <p class="v" :class="{ absent: !elements.risks || !elements.risks.length }">
+                        {{ listText(elements.risks) }}
+                    </p>
+                </div>
+                <div class="field">
+                    <span class="k">数据合规</span>
+                    <p class="v" :class="{ absent: isAbsent(elements.compliance) }">{{ elements.compliance }}</p>
+                </div>
+                <div class="field">
+                    <span class="k">目标用户</span>
+                    <p class="v">{{ elements.users }}</p>
+                </div>
+
+                <div class="missing" v-if="elements.missing && elements.missing.length">
+                    <span class="k">方案缺失项</span>
+                    <div class="tags">
+                        <span v-for="m in elements.missing" :key="m">{{ m }}</span>
+                    </div>
+                </div>
+            </template>
+        </aside>
+    </div>
+
+    <!-- 底部：方案提交 -->
+    <footer class="composer">
+        <div class="inner">
+            <textarea v-model="planText" :disabled="running"
+                      placeholder="把开题 / 大创 / 竞赛方案粘贴到这里，或点右边上传 Word、PDF、txt…"></textarea>
+            <div class="row">
+                <label class="file-label">
+                    上传方案文件
+                    <input type="file" accept=".txt,.md,.docx,.pdf"
+                           @change="onFile" :disabled="running">
+                </label>
+
+                <button class="btn" :disabled="running || !planText.trim()" @click="submitPlan">
+                    提交方案
+                </button>
+
+                <button class="btn primary"
+                        :disabled="running || !sessionId"
+                        @click="startMeeting">
+                    开始评审会
+                </button>
+
+                <span class="status" :class="{ err: !!error }">{{ statusText }}</span>
+            </div>
+        </div>
+    </footer>
+</div>
+
+<script>
+    new Vue({
+        el: '#app',
+        data: {
+            reviewers: [
+                { role: 'tech', name: '技术评审' },
+                { role: 'cost', name: '成本与进度评审' },
+                { role: 'compliance', name: '合规与伦理评审' },
+                { role: 'user', name: '用户与价值评审' }
+            ],
+            planText: '',
+            elements: null,
+            sessionId: '',
+            utterances: [],
+            current: null,      // 正在流式输出的那一条
+            running: false,
+            error: '',
+            status: '',
+            summary: null
+        },
+        computed: {
+            // 已经发过言的评审，用来点亮顶部的席位
+            spokenRoles: function () {
+                var set = [];
+                this.utterances.forEach(function (u) {
+                    if (set.indexOf(u.role) < 0) set.push(u.role);
+                });
+                return set;
+            },
+            statusText: function () {
+                if (this.error) return this.error;
+                if (this.status) return this.status;
+                if (this.running) return '评审会进行中…';
+                if (this.sessionId) return '方案已提交，可以开始评审会';
+                return '等待提交方案';
+            }
+        },
+        methods: {
+            listText: function (arr) {
+                if (!arr || !arr.length) return '未提及';
+                return arr.join('；');
+            },
+            isAbsent: function (v) {
+                return !v || v.indexOf('未提及') >= 0;
+            },
+
+            // ---------- 上传文件 ----------
+            onFile: function (e) {
+                var file = e.target.files && e.target.files[0];
+                if (!file) return;
+                var self = this;
+                var fd = new FormData();
+                fd.append('file', file);
+                this.error = '';
+                this.status = '正在解析 ' + file.name + '…';
+                fetch('/review/upload', { method: 'POST', body: fd })
+                    .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+                    .then(function (res) {
+                        if (!res.ok) throw new Error(res.d.detail || '上传失败');
+                        self.planText = res.d.plan_text;
+                        self.status = '已解析 ' + res.d.chars + ' 字，确认无误后点「提交方案」';
+                    })
+                    .catch(function (err) { self.error = String(err.message || err); self.status = ''; })
+                    .finally(function () { e.target.value = ''; });
+            },
+
+            // ---------- 提交方案：抽要素并落库 ----------
+            submitPlan: function () {
+                var self = this;
+                this.error = '';
+                this.status = '正在抽取方案要素…';
+                fetch('/review/submit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ plan_text: this.planText })
+                })
+                    .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+                    .then(function (res) {
+                        if (!res.ok) throw new Error(res.d.detail || '提交失败');
+                        self.sessionId = res.d.session_id;
+                        self.elements = res.d.plan_elements;
+                        self.status = '要素表已生成（缺 ' +
+                            ((res.d.plan_elements.missing || []).length) + ' 项）';
+                    })
+                    .catch(function (err) { self.error = String(err.message || err); self.status = ''; });
+            },
+
+            // ---------- 开始评审会：读 SSE 流 ----------
+            // 用 fetch + ReadableStream 而不是 EventSource：
+            // EventSource 只能发 GET，方案正文塞不进 URL
+            startMeeting: function () {
+                var self = this;
+                this.error = '';
+                this.status = '';
+                this.running = true;
+                this.summary = null;
+                this.utterances = [];
+                this.current = null;
+
+                fetch('/review/meeting/stream', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_id: this.sessionId, max_round: 1 })
+                })
+                    .then(function (resp) {
+                        if (!resp.ok) {
+                            return resp.json().then(function (d) {
+                                throw new Error(d.detail || '评审会启动失败');
+                            });
+                        }
+                        var reader = resp.body.getReader();
+                        var decoder = new TextDecoder('utf-8');
+                        var buffer = '';
+
+                        function pump() {
+                            return reader.read().then(function (res) {
+                                if (res.done) return;
+                                buffer += decoder.decode(res.value, { stream: true });
+                                // SSE 用空行分隔事件
+                                var idx;
+                                while ((idx = buffer.indexOf('\n\n')) >= 0) {
+                                    var raw = buffer.slice(0, idx);
+                                    buffer = buffer.slice(idx + 2);
+                                    raw.split('\n').forEach(function (line) {
+                                        if (line.indexOf('data: ') === 0) {
+                                            try {
+                                                self.handleEvent(JSON.parse(line.slice(6)));
+                                            } catch (e) { /* 半包就跳过 */ }
+                                        }
+                                    });
+                                }
+                                return pump();
+                            });
+                        }
+                        return pump();
+                    })
+                    .catch(function (err) { self.error = String(err.message || err); })
+                    .finally(function () {
+                        self.running = false;
+                        if (self.current) { self.current.streaming = false; self.current = null; }
+                    });
+            },
+
+            // ---------- 事件分发 ----------
+            handleEvent: function (e) {
+                if (e.event === 'elements') {
+                    this.status = '要素表已就绪';
+                } else if (e.event === 'speaker_start') {
+                    // 新建一个气泡，后面的 token 往里追加
+                    var item = {
+                        role: e.role,
+                        name: e.name,
+                        questionType: e.question_type,
+                        target: e.target || '',
+                        targetName: e.target_name || '',
+                        text: '',
+                        streaming: true
+                    };
+                    this.utterances.push(item);
+                    this.current = item;
+                } else if (e.event === 'token') {
+                    if (this.current) this.current.text += e.text;
+                } else if (e.event === 'speaker_end') {
+                    if (this.current) {
+                        this.current.text = e.question;
+                        this.current.streaming = false;
+                        this.current = null;
+                    }
+                } else if (e.event === 'meeting_end') {
+                    // 从发言记录里统计，比前端自己数更可靠
+                    var log = e.question_log || [];
+                    var mains = log.filter(function (x) { return x.question_type !== 'cross'; });
+                    var crosses = log.filter(function (x) { return x.question_type === 'cross'; });
+                    var roles = [];
+                    log.forEach(function (x) {
+                        if (roles.indexOf(x.speaker_role) < 0) roles.push(x.speaker_role);
+                    });
+                    this.summary = {
+                        mainCount: mains.length,
+                        crossCount: crosses.length,
+                        roles: roles,
+                        crossTotal: e.cross_total || 0
+                    };
+                    this.status = '评审会结束';
+                } else if (e.event === 'error') {
+                    this.error = e.message || '评审会出错';
+                }
+            }
+        }
+    });
+</script>
+</body>
+</html>

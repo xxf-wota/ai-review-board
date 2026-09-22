@@ -87,6 +87,11 @@ def pick_reaction(reactions: list, spoke_in_issue: list, order: list, question_l
             cross_count[who] = cross_count.get(who, 0) + 1
 
     # 排序依据：严重度高的优先；严重度相同时，让还没怎么接过话的人先说，避免同一个人反复插话
+    """
+    第一优先级：严重度高的优先
+    第二优先级：还没怎么接过话的人先说
+    第三优先级：按名单顺序说，这是因为上面两种都满足才需要这个判定，而名单索引是唯一的
+    """
     return max(candidates, key=lambda r: (
         r.get("severity", 0),
         -cross_count.get(r.get("role"), 0),
@@ -128,6 +133,7 @@ async def cross_node(state: ReviewState):
 
     role = pick["role"]
     # 接话针对的是上一位主问题发言者
+    # next() + 生成器表达式 + reversed() 组合，实现"从后往前找第一个满足条件的元素"
     last_main = next(
         (q for q in reversed(question_log) if q.get("question_type") in ("main", "followup")),
         None,
