@@ -27,6 +27,10 @@ REPORT = os.path.join(ROOT, "data", "_m1_check.txt")
 TXT = os.path.join(ROOT, "data", "demo_plan.txt")
 DOCX = os.path.join(ROOT, "data", "demo_plan.docx")
 PDF = os.path.join(ROOT, "data", "sample_plan_en.pdf")
+# 第二份样本（社区居家养老）：四个维度都留了破绽，用来测评审效果
+ELDER_TXT = os.path.join(ROOT, "data", "sample_plan_eldercare.txt")
+ELDER_DOCX = os.path.join(ROOT, "data", "sample_plan_eldercare.docx")
+ELDER_PDF = os.path.join(ROOT, "data", "sample_plan_eldercare.pdf")
 
 _lines = []
 
@@ -52,6 +56,10 @@ def main():
         (TXT, "教材"),
         (DOCX, "教材"),
         (PDF, "FastAPI"),
+        # 中文 PDF：验证 Chrome 渲染出来的 PDF 里汉字能正常抽出来
+        (ELDER_TXT, "独居"),
+        (ELDER_DOCX, "独居"),
+        (ELDER_PDF, "独居"),
     ]:
         name = os.path.basename(path)
         try:

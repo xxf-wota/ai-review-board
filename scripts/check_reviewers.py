@@ -70,10 +70,12 @@ def main():
     log("M2 验收：四位评审的视角是否真的不同")
     log("=" * 70)
 
-    # 读方案样本
-    with open("data/demo_plan.txt", encoding="utf-8") as f:
+    # 读方案样本。可以传路径换样本：
+    #   python scripts/check_reviewers.py data/sample_plan_eldercare.txt
+    sample_path = sys.argv[1] if len(sys.argv) > 1 else "data/demo_plan.txt"
+    with open(sample_path, encoding="utf-8") as f:
         plan_text = f.read()
-    log(f"\n方案样本长度：{len(plan_text)} 字")
+    log(f"\n方案样本：{sample_path}（{len(plan_text)} 字）")
 
     # 步骤一：要素抽取
     log("\n" + "-" * 70)

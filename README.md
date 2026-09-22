@@ -163,6 +163,29 @@ python -m app.main
 
 ---
 
+## 测试样本
+
+`data/` 下有两份示例方案，**各自提供 txt / docx / pdf 三种格式**，可以直接拖到页面底部上传：
+
+| 样本 | 说明 |
+|---|---|
+| `demo_plan.*` | 校园二手教材交易平台，信息写得比较全，基础样本 |
+| `sample_plan_eldercare.*` | 社区居家养老系统，**技术 / 成本 / 合规 / 用户四个维度都留了破绽**，用来测评审效果 |
+
+也可以指定样本单独跑四位评审：
+
+```bash
+python scripts/check_reviewers.py data/sample_plan_eldercare.txt
+```
+
+样本可以随时重新生成（Word 用 python-docx，PDF 用无头 Chrome 渲染，中文能正常嵌入）：
+
+```bash
+python scripts/make_sample_docs.py
+```
+
+---
+
 ## 进度
 
 | 阶段 | 内容 | 状态 |

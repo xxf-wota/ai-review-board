@@ -1,3 +1,5 @@
+import re
+
 from langchain.agents import create_agent
 from langchain.agents.middleware import ModelCallLimitMiddleware
 from langchain.agents.structured_output import ProviderStrategy
@@ -64,6 +66,31 @@ def _build_agent(model):
     )
 
 
+# 字段值清洗
+# 实测本地模型会把提示词里的说明文字抄进字段值，例如
+#   budget = "未提及，在 missing 中加入 预算。"
+# 这类尾巴必须裁掉，否则要素表面板上会显示出提示词，很难看
+_CONTAMINATION = ("missing", "加入", "填入", "应填", "记入")
+
+
+def _normalize_fields(elements: dict) -> dict:
+    for key in ("goal", "budget", "schedule", "compliance", "users"):
+        value = str(elements.get(key) or "").strip()
+        # 先裁掉说明文字的尾巴
+        for marker in _CONTAMINATION:
+            idx = value.find(marker)
+            if idx > 0:
+                value = value[:idx]
+        # 值里出现"未提及"却还带着别的内容，说明模型没抽出来，只保留它前面那段
+        if "未提及" in value:
+            head = value.split("未提及")[0]
+            value = re.sub(r"[\s，,；;。、：:]+$", "", head).strip() or "未提及"
+        # 去掉尾部多余标点
+        value = re.sub(r"[\s，,；;。、]+$", "", value)
+        elements[key] = value or "未提及"
+    return elements
+
+
 # 缺失项兜底：某一项是不是缺，从字段本身就能直接判断，不该交给模型自由发挥
 def _normalize_missing(elements: dict) -> dict:
     missing = list(elements.get("missing") or [])
@@ -120,7 +147,7 @@ def extract_elements(plan_text: str) -> dict:
             # 两个模型都不可用时不能抛异常，否则整场会议直接死掉，演示就砸了
             print(f"-----------商业模型也不可用，降级为兜底要素表：{e2}------------")
             return _degraded_elements(plan_text)
-    return _normalize_missing(rs["structured_response"].model_dump())
+    return _normalize_missing(_normalize_fields(rs["structured_response"].model_dump()))
 
 
 # 图节点：抽取要素并推进会议阶段
