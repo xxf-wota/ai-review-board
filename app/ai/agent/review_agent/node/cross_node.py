@@ -182,8 +182,9 @@ async def cross_node(state: ReviewState):
 
     # 质量兜底：接话不能是炒冷饭。抄对方原话等于没接，重复自己之前问过的更难看
     # （本地模型实测两个毛病都会犯）重试一次，还是不行就放弃这次接话
+    who = REVIEWER_NAMES.get(role, role)
     if _too_repetitive(text, target_question, question_log, role):
-        print(f"-----------接话在炒冷饭，重试一次：{text[:40]}------------")
+        print(f"-----------{who}接话在炒冷饭，重试一次：{text[:40]}------------")
         try:
             rs = await agent.ainvoke({"messages": [HumanMessage(content=(
                 user_msg["messages"][0].content
@@ -193,12 +194,12 @@ async def cross_node(state: ReviewState):
             retry_msgs = rs.get("messages") or []
             text = first_question(str(retry_msgs[-1].content or "")) if retry_msgs else ""
         except Exception as e:
-            print(f"-----------接话重试失败：{e}------------")
+            print(f"-----------{who}接话重试失败：{e}------------")
         if _too_repetitive(text, target_question, question_log, role):
-            print("-----------接话仍在炒冷饭，本次放弃接话------------")
+            print(f"-----------{who}接话仍在炒冷饭，本次放弃接话------------")
             return {"cross_checked": True}
 
-    who = REVIEWER_NAMES.get(role, role)
+
     target_name = REVIEWER_NAMES.get(target, target)
     # 模型没吐出内容时兜底：拿判定阶段整理的理由顶上，并写清是针对谁说的
     if not text:

@@ -703,6 +703,8 @@
                 chatList: [],
                 input: '请给我1道python题',
                 userId: 'user_' + Math.random().toString(36).substring(2, 8),
+                // 会话ID，由 /create_session 下发，带着它才能续上记忆
+                sessionId: '',
                 historyList: [
                     // { id: 1, title: 'Vue响应式原理', messages: [] },
                     // { id: 2, title: '长列表性能优化', messages: [] },
@@ -713,6 +715,8 @@
                 eventSource: null,
             },
             mounted() {
+                // 页面打开就把会话建好，后面每句话都带着它，记忆才接得上
+                this.ensureSession();
                 // 初始化示例消息 (包含 Markdown 格式的 AI 回复)
                 this.historyList[0].messages = [
                     { role: 'user', content: '请解释一下Vue的响应式原理' },
@@ -733,6 +737,27 @@
                 this.loadHistoryMessages(0);
             },
             methods: {
+                // 创建/复用会话。会话由后端存在 Redis 里，带过期时间，
+                // 同一个 session_id 才能把多轮对话的记忆串起来
+                ensureSession() {
+                    if (this.sessionId) return Promise.resolve(this.sessionId);
+                    return fetch('/create_session', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ user_id: this.userId })
+                    })
+                        .then(r => r.json())
+                        .then(res => {
+                            this.sessionId = res.data || '';
+                            console.log('会话已创建：', this.sessionId);
+                            return this.sessionId;
+                        })
+                        .catch(e => {
+                            console.error('创建会话失败，将由后端自动新建', e);
+                            return '';
+                        });
+                },
+
                 // 使用 marked 格式化消息内容
                 formatMessage(content) {
                     if (!content) return '';
@@ -848,7 +873,7 @@
                     }
 
                     // 准备 SSE 请求
-                    const params = `question=${encodeURIComponent(question)}&user_id=${encodeURIComponent(this.userId)}`;
+                    const params = `question=${encodeURIComponent(question)}&user_id=${encodeURIComponent(this.userId)}&session_id=${encodeURIComponent(this.sessionId || '')}`;
 
                     if (this.eventSource) {
                         this.eventSource.close();

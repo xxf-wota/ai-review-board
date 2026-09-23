@@ -9,34 +9,42 @@ from importlib import metadata
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# 项目实际用到的包（发行包名）
+# 项目实际用到的包。写成 (写进 requirements 的名字, 查询版本的发行包名)
+# 两者不同是因为 extras 写法（psycopg[binary]）不是发行包名
 PACKAGES = [
-    "fastapi",
-    "uvicorn",
-    "python-multipart",
-    "pydantic",
-    "langchain",
-    "langchain-core",
-    "langchain-openai",
-    "langgraph",
-    "httpx",
-    "PyMySQL",
-    "python-dotenv",
-    "PyYAML",
-    "python-docx",
-    "pdfplumber",
-    "pypdf",
-    "vosk",
-    "pyecharts",
-    "numpy",
+    ("fastapi", "fastapi"),
+    ("uvicorn", "uvicorn"),
+    ("python-multipart", "python-multipart"),
+    ("pydantic", "pydantic"),
+    ("langchain", "langchain"),
+    ("langchain-core", "langchain-core"),
+    ("langchain-openai", "langchain-openai"),
+    ("langgraph", "langgraph"),
+    ("langgraph-checkpoint-postgres", "langgraph-checkpoint-postgres"),
+    ("httpx", "httpx"),
+    ("PyMySQL", "PyMySQL"),
+    ("python-dotenv", "python-dotenv"),
+    ("PyYAML", "PyYAML"),
+    ("python-docx", "python-docx"),
+    ("pdfplumber", "pdfplumber"),
+    ("pypdf", "pypdf"),
+    ("vosk", "vosk"),
+    ("pyecharts", "pyecharts"),
+    ("numpy", "numpy"),
+    # 会话与记忆基础设施
+    ("redis", "redis"),
+    ("chromadb", "chromadb"),
+    # [binary] 会把 libpq 一起装进来，省掉「PATH 里没有 libpq 就起不来」这类环境问题
+    ("psycopg[binary]", "psycopg"),
+    ("psycopg-pool", "psycopg-pool"),
 ]
 
 resolved, missing = [], []
-for name in PACKAGES:
+for req_name, dist_name in PACKAGES:
     try:
-        resolved.append(f"{name}=={metadata.version(name)}")
+        resolved.append(f"{req_name}=={metadata.version(dist_name)}")
     except metadata.PackageNotFoundError:
-        missing.append(name)
+        missing.append(dist_name)
 
 header = [
     "# 由 scripts/make_requirements.py 从当前环境读取生成",
