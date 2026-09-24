@@ -6,7 +6,10 @@ from langchain.messages import AnyMessage
 
 """
 模拟评审会状态
-会议推进靠 meeting_phase，等学生回答靠 pending_question 是否为空
+会议推进靠 meeting_phase：问到 await_answer 就停下等学生回答，学生答完回来跑 judge
+
+注意：LangGraph 只会保留这里声明过的字段，节点里 return 的新字段如果没写进来会被直接丢掉
+（M3 踩过这个坑：max_cross_total 没声明，传进去 0 也不生效）
 """
 
 
@@ -33,10 +36,17 @@ class ReviewState(TypedDict):
     current_speaker: str
     # 非空代表已抛出问题，正在等学生回答
     pending_question: str
-    # main / followup
+    # main / followup / cross，标记这个问题的来路
     pending_type: str
-    # 追问层数，最多 2 层
+    # 抛出这个问题的评审。学生答完后由他来判定，也只由他追问
+    pending_from: str
+    # 追问层数，上一轮答不好才追，最多 1 层
     followup_depth: int
+    # 判定说该追问时，把"往哪个点追"记下来，交给发言节点用这位评审的口吻重新组织成问题
+    followup_hint: str
+    # ---------- 学生回答 ----------
+    # 学生最新一次回答。前端点"跳过"会写入 SKIP_MARK
+    student_answer: str
     # ---------- 交叉质询防跑偏 ----------
     # 本议题已接话次数，上限 1
     cross_in_issue: int

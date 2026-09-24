@@ -159,11 +159,50 @@
             margin: 4px 0 18px;
         }
 
+        /* ---------- 学生自己的回答，按普通聊天那样靠右 ---------- */
+        .msg.student {
+            flex-direction: row-reverse;
+        }
+
+        .msg.student .name {
+            text-align: right;
+        }
+
+        .msg.student .bubble {
+            background: #4a8cf7;
+            color: #fff;
+        }
+
+        /* 判定结论：居中一行小字，不占气泡 */
+        .note {
+            text-align: center;
+            font-size: 12px;
+            color: #8a9099;
+            margin: -8px 0 18px;
+            line-height: 1.8;
+        }
+
+        /* 追问标注 */
+        .follow {
+            color: #4a8cf7;
+            margin-left: 6px;
+        }
+
         /* ---------- 底部输入区 ---------- */
         .composer {
             border-top: 1px solid #e6e8eb;
             padding: 12px 20px 16px;
             flex-shrink: 0;
+        }
+
+        /* 轮到你回答时的提示条 */
+        .ask {
+            font-size: 13px;
+            color: #4a8cf7;
+            background: #eef4fe;
+            border-radius: 6px;
+            padding: 8px 12px;
+            margin-bottom: 10px;
         }
 
         .composer textarea {
@@ -285,41 +324,72 @@
 
         <!-- 发言列表 -->
         <div v-for="(u, i) in utterances" :key="i"
-             class="msg" :class="{ cross: u.questionType === 'cross', streaming: u.streaming }">
-            <div class="avatar" :style="{ background: u.color }">{{ u.short }}</div>
-            <div class="body">
-                <div class="name">
-                    {{ u.name }}
-                    <span v-if="u.questionType === 'cross'" class="reply">
-                        ⟶ 接 {{ u.targetName }} 的话
-                    </span>
+             class="msg"
+             :class="{ cross: u.questionType === 'cross', streaming: u.streaming, student: u.kind === 'student' }">
+            <!-- 判定结论用小字居中显示，不套气泡 -->
+            <div v-if="u.kind === 'note'" class="note">{{ u.text }}</div>
+            <template v-else>
+                <div class="avatar" :style="{ background: u.color }">{{ u.short }}</div>
+                <div class="body">
+                    <div class="name">
+                        {{ u.name }}
+                        <span v-if="u.questionType === 'cross'" class="reply">
+                            ⟶ 接 {{ u.targetName }} 的话
+                        </span>
+                        <span v-else-if="u.questionType === 'followup'" class="follow">↳ 追问</span>
+                    </div>
+                    <div class="bubble">{{ u.text }}</div>
                 </div>
-                <div class="bubble">{{ u.text }}</div>
-            </div>
+            </template>
         </div>
 
         <!-- 会议结束汇总 -->
         <div v-if="summary" class="summary">
-            评审会结束 · {{ summary.mainCount }} 个主问题 · {{ summary.crossCount }} 次交叉质询
+            评审会结束 · {{ summary.mainCount }} 个主问题 ·
+            {{ summary.crossCount }} 次交叉质询 ·
+            未答好 {{ summary.unresolvedCount }} 个
         </div>
     </div>
 
     <div class="composer">
-        <textarea v-model="planText" v-show="!running"
-                  placeholder="把开题 / 大创 / 竞赛方案粘贴到这里…"></textarea>
-        <div class="row">
-            <label class="file-label">
-                上传文件
-                <input type="file" accept=".txt,.md,.docx,.pdf" @change="onFile">
-            </label>
-            <button class="btn" :disabled="running || !planText.trim()" @click="submitPlan">
-                提交方案
-            </button>
-            <button class="btn primary" :disabled="running || !sessionId" @click="startMeeting">
-                开始评审会
-            </button>
-            <span class="status" :class="{ err: !!error }">{{ statusText }}</span>
-        </div>
+        <!-- 方案还没交：先提交方案，再开评审会 -->
+        <template v-if="!started">
+            <textarea v-model="planText"
+                      placeholder="把开题 / 大创 / 竞赛方案粘贴到这里…"></textarea>
+            <div class="row">
+                <label class="file-label">
+                    上传文件
+                    <input type="file" accept=".txt,.md,.docx,.pdf" @change="onFile">
+                </label>
+                <button class="btn" :disabled="running || !planText.trim()" @click="submitPlan">
+                    提交方案
+                </button>
+                <button class="btn primary" :disabled="running || !sessionId" @click="startMeeting">
+                    开始评审会
+                </button>
+                <span class="status" :class="{ err: !!error }">{{ statusText }}</span>
+            </div>
+        </template>
+
+        <!-- 评审会开始后：这里变成答题框，答不上来可以跳过 -->
+        <template v-else>
+            <div v-if="awaiting" class="ask">{{ awaitingName }} 在等你回答，答不上来就点「跳过」</div>
+            <textarea v-model="answerText" :disabled="running || !awaiting"
+                      placeholder="回答评审的问题…"></textarea>
+            <div class="row">
+                <button class="btn primary" :disabled="running || !awaiting" @click="submitAnswer(false)">
+                    提交回答
+                </button>
+                <button class="btn" :disabled="running || !awaiting" @click="submitAnswer(true)">
+                    跳过
+                </button>
+                <!-- 会议开完了给个出口，不然只能刷新页面 -->
+                <button v-if="summary" class="btn" @click="restart">
+                    重新开始
+                </button>
+                <span class="status" :class="{ err: !!error }">{{ statusText }}</span>
+            </div>
+        </template>
     </div>
 </div>
 
@@ -343,13 +413,19 @@
             error: '',
             status: '',
             summary: null,
-            scrollTimer: null
+            scrollTimer: null,
+            started: false,     // 评审会是否已经开始，决定下面显示"提交方案"还是"答题框"
+            awaiting: false,    // 是否停在"等学生回答"
+            awaitingName: '',   // 在等谁的问题
+            answerText: ''      // 答题框里的内容
         },
         computed: {
             statusText: function () {
                 if (this.error) return this.error;
                 if (this.status) return this.status;
                 if (this.running) return '评审会进行中…';
+                if (this.awaiting) return '等你的回答';
+                if (this.started) return '评审会已结束';
                 if (this.sessionId) return '方案已提交，可以开始评审会';
                 return '等待提交方案';
             }
@@ -426,9 +502,45 @@
                     .catch(function (err) { self.error = String(err.message || err); self.status = ''; });
             },
 
-            // ---------- 开始评审会：读 SSE 流 ----------
+            // ---------- 评审会：读 SSE 流 ----------
             // 用 fetch + ReadableStream 而不是 EventSource：
             // EventSource 只能发 GET，方案正文塞不进 URL
+            // 开场和答题两个接口读的是同一种流，抽出来共用
+            pump: function (resp) {
+                var self = this;
+                if (!resp.ok) {
+                    return resp.json().then(function (d) {
+                        throw new Error(d.detail || '评审会请求失败');
+                    });
+                }
+                var reader = resp.body.getReader();
+                var decoder = new TextDecoder('utf-8');
+                var buffer = '';
+
+                function read() {
+                    return reader.read().then(function (res) {
+                        if (res.done) return;
+                        buffer += decoder.decode(res.value, { stream: true });
+                        // SSE 用空行分隔事件
+                        var idx;
+                        while ((idx = buffer.indexOf('\n\n')) >= 0) {
+                            var raw = buffer.slice(0, idx);
+                            buffer = buffer.slice(idx + 2);
+                            raw.split('\n').forEach(function (line) {
+                                if (line.indexOf('data: ') === 0) {
+                                    try {
+                                        self.handleEvent(JSON.parse(line.slice(6)));
+                                    } catch (e) { /* 半包就跳过 */ }
+                                }
+                            });
+                        }
+                        return read();
+                    });
+                }
+                return read();
+            },
+
+            // ---------- 开评审会：跑到第一位评审提问就停 ----------
             startMeeting: function () {
                 var self = this;
                 this.error = '';
@@ -437,49 +549,78 @@
                 this.summary = null;
                 this.utterances = [];
                 this.current = null;
+                this.started = true;
 
-                fetch('/review/meeting/stream', {
+                fetch('/review/meeting/start', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ session_id: this.sessionId, max_round: 1 })
                 })
-                    .then(function (resp) {
-                        if (!resp.ok) {
-                            return resp.json().then(function (d) {
-                                throw new Error(d.detail || '评审会启动失败');
-                            });
-                        }
-                        var reader = resp.body.getReader();
-                        var decoder = new TextDecoder('utf-8');
-                        var buffer = '';
-
-                        function pump() {
-                            return reader.read().then(function (res) {
-                                if (res.done) return;
-                                buffer += decoder.decode(res.value, { stream: true });
-                                // SSE 用空行分隔事件
-                                var idx;
-                                while ((idx = buffer.indexOf('\n\n')) >= 0) {
-                                    var raw = buffer.slice(0, idx);
-                                    buffer = buffer.slice(idx + 2);
-                                    raw.split('\n').forEach(function (line) {
-                                        if (line.indexOf('data: ') === 0) {
-                                            try {
-                                                self.handleEvent(JSON.parse(line.slice(6)));
-                                            } catch (e) { /* 半包就跳过 */ }
-                                        }
-                                    });
-                                }
-                                return pump();
-                            });
-                        }
-                        return pump();
-                    })
+                    .then(function (resp) { return self.pump(resp); })
                     .catch(function (err) { self.error = String(err.message || err); })
                     .finally(function () {
                         self.running = false;
                         if (self.current) { self.current.streaming = false; self.current = null; }
                     });
+            },
+
+            // ---------- 交回答：把会议从检查点唤醒，接着往下开 ----------
+            // skip=true 表示这题不会。后端会记成"未解决"且不再追问
+            submitAnswer: function (skip) {
+                var self = this;
+                var answer = skip ? '' : this.answerText.trim();
+                if (!skip && !answer) return;
+
+                this.error = '';
+                this.status = '';
+                // 学生的回答也进聊天记录，看着才像在答辩
+                if (!skip) {
+                    this.utterances.push({
+                        kind: 'student',
+                        name: '学生（我）',
+                        short: '学生',
+                        color: '#3c4250',
+                        text: answer
+                    });
+                }
+                this.answerText = '';
+                this.awaiting = false;
+                this.running = true;
+                this.scrollToLatest();
+
+                fetch('/review/meeting/answer', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_id: this.sessionId, answer: answer, skip: !!skip })
+                })
+                    .then(function (resp) { return self.pump(resp); })
+                    .catch(function (err) { self.error = String(err.message || err); })
+                    .finally(function () {
+                        self.running = false;
+                        if (self.current) { self.current.streaming = false; self.current = null; }
+                    });
+            },
+
+            // 判定结果翻成人话
+            verdictText: function (v) {
+                if (v === 'resolved') return '答清楚了';
+                if (v === 'partial') return '答得不全';
+                return '没答到点上';
+            },
+
+            // 会议开完了回到起始状态。方案正文留着，方便换个说法再开一场
+            restart: function () {
+                this.started = false;
+                this.awaiting = false;
+                this.awaitingName = '';
+                this.answerText = '';
+                this.utterances = [];
+                this.current = null;
+                this.summary = null;
+                this.error = '';
+                this.status = '';
+                this.sessionId = '';
+                this.elements = null;
             },
 
             // ---------- 事件分发 ----------
@@ -492,6 +633,7 @@
                         return r.role === e.role;
                     })[0] || { short: '评审', color: '#8a9099' };
                     var item = {
+                        kind: 'reviewer',
                         role: e.role,
                         name: e.name,
                         short: info.short,
@@ -515,15 +657,33 @@
                         this.current = null;
                     }
                     this.scrollToLatest();
+                } else if (e.event === 'verdict') {
+                    // 判定结论用小字插一条，别混进评审的气泡里
+                    this.utterances.push({
+                        kind: 'note',
+                        text: (e.name || '评审') + ' 判定：' + this.verdictText(e.verdict) +
+                            '（严重度 ' + e.severity + '）' +
+                            (e.comment ? ' · ' + e.comment : '') +
+                            (e.followup ? ' · 继续追问' : '')
+                    });
+                    this.scrollToLatest();
+                } else if (e.event === 'await_answer') {
+                    // 图停下来了，轮到学生答
+                    this.awaiting = true;
+                    this.awaitingName = e.name || '评审';
+                    this.status = '';
+                    this.scrollToLatest();
                 } else if (e.event === 'meeting_end') {
                     // 从发言记录里统计，比前端自己数更可靠
                     var log = e.question_log || [];
-                    var mains = log.filter(function (x) { return x.question_type !== 'cross'; });
+                    var mains = log.filter(function (x) { return x.question_type === 'main'; });
                     var crosses = log.filter(function (x) { return x.question_type === 'cross'; });
                     this.summary = {
                         mainCount: mains.length,
-                        crossCount: crosses.length
+                        crossCount: crosses.length,
+                        unresolvedCount: (e.unresolved || []).length
                     };
+                    this.awaiting = false;
                     this.status = '评审会结束';
                     this.scrollToLatest();
                 } else if (e.event === 'error') {

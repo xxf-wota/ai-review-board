@@ -54,12 +54,48 @@ def _build_agent(role: str, model):
     )
 
 
-# 拼接发言节点收到的输入：方案要素表 + 已有问答记录
-def _build_input(plan_elements: dict, history: str = "") -> str:
+# 把某条发言记录渲染成一行，评审和学生的话用不同前缀标出来
+def _format_entry(item: dict) -> str:
+    who = REVIEWER_NAMES.get(item.get("speaker_role", ""), item.get("speaker_role", ""))
+    question = item.get("question", "")
+    if item.get("question_type") == "cross":
+        target = REVIEWER_NAMES.get(item.get("target_speaker", ""), "学生")
+        lines = [f"【{who}】接{target}的话：{question}"]
+    elif item.get("question_type") == "followup":
+        lines = [f"【{who}】追问：{question}"]
+    else:
+        lines = [f"【{who}】提问：{question}"]
+    answer = (item.get("student_answer") or "").strip()
+    if answer:
+        lines.append(f"【学生】回答：{answer}")
+    return "\n".join(lines)
+
+
+# 取"本议题"的问答记录：从最后一条主问题开始往后切。
+# 追问必须看到学生上一条答了什么，不然会照着原问题再问一遍；
+# 但也不能把整场会议的记录都倒给它，那样评审会跑题去问别人议题的东西
+def issue_transcript(question_log: list) -> str:
+    log = question_log or []
+    start = 0
+    for i in range(len(log) - 1, -1, -1):
+        if log[i].get("question_type") == "main":
+            start = i
+            break
+    return "\n".join(_format_entry(item) for item in log[start:])
+
+
+# 拼接发言节点收到的输入：方案要素表 + 本议题已有的问答 + 追问方向
+def _build_input(plan_elements: dict, history: str = "", hint: str = "",
+                 is_followup: bool = False) -> str:
     content = f"以下是学生提交的方案要素表：\n{format_elements(plan_elements)}"
     if history:
-        content += f"\n\n以下是本场评审会已经发生的问答：\n{history}"
-    content += "\n\n请提出你的质询问题。"
+        content += f"\n\n以下是本议题已经发生的问答：\n{history}"
+    if hint:
+        content += f"\n\n你这次要追的方向：{hint}"
+    if is_followup:
+        content += "\n\n学生刚才的回答没能打消你的疑问，请针对他答得含糊、或者没给依据的那个具体点，提出一个追问。"
+    else:
+        content += "\n\n请提出你的质询问题。"
     return content
 
 
@@ -89,15 +125,19 @@ def reviewer_question(role: str, plan_elements: dict, history: str = "") -> str:
 async def speaker_node(state: ReviewState):
     role = state.get("current_speaker") or "tech"
     plan_elements = state.get("plan_elements") or {}
-    # 追问时把本议题已有的问答带上，让评审知道学生刚才是怎么答的
-    history = state.get("pending_question", "")
-    if state.get("pending_type") == "followup":
-        history = f"你上一轮已经问过：{history}"
+    # 主问题只看要素表：把前面的记录带进去，评审会忍不住去问别人议题的东西。
+    # 追问则必须把本议题已经问过的、学生答过的都带上，否则他不知道学生刚才怎么答的
+    is_followup = (state.get("pending_type") or "main") == "followup"
+    history = issue_transcript(state.get("question_log") or []) if is_followup else ""
+    hint = (state.get("followup_hint") or "") if is_followup else ""
 
-    user_msg = {"messages": [HumanMessage(content=_build_input(plan_elements, history))]}
+    user_msg = {"messages": [HumanMessage(content=_build_input(
+        plan_elements, history, hint, is_followup))]}
     name = REVIEWER_NAMES.get(role, role)
+    # 追问在主问题基础上多带一个标记：前端据此在气泡上区别显示
+    qtype = "followup" if is_followup else "main"
     # 先告诉前端"谁要开始说话了"，前端据此开一个气泡
-    events.speaker_start(role, name, "main")
+    events.speaker_start(role, name, qtype)
     result = []
     try:
         agent = _build_agent(role, MyModel.get_local_model())
@@ -123,22 +163,28 @@ async def speaker_node(state: ReviewState):
     log.append({
         "round": state.get("round", 1),
         "speaker_role": role,
-        "question_type": state.get("pending_type") or "main",
+        "question_type": qtype,
         "target_speaker": "",
         "question": question,
+        "student_answer": "",
         "verdict": "",
+        "verdict_comment": "",
         "severity": 0,
         "followup_depth": state.get("followup_depth", 0),
     })
     # 发言结束，把完整问题一次性告诉前端
-    events.speaker_end(role, name, question, "main")
+    events.speaker_end(role, name, question, qtype)
     return {
         "messages": [AIMessage(content=f"\n【{name}】{question}\n")],
         "pending_question": question,
-        "pending_type": "main",
-        # 发言完进入接话判定；M4 接上学生回答后，这里会先转到"等学生回答"
-        "meeting_phase": "cross",
-        "cross_checked": False,
+        "pending_type": qtype,
+        # 提问者记下来：学生答完之后由他判定，也只由他追问
+        "pending_from": role,
+        # 主问题问完先过一轮接话（别的评审可能当场反驳），
+        # 追问问完就直接等学生回答，不再接话，避免一个议题反复拉扯
+        "meeting_phase": "await_answer" if is_followup else "cross",
+        # 追问后不该再进接话判定，置 True 是双保险
+        "cross_checked": is_followup,
         "spoke_in_issue": spoke,
         "question_log": log,
     }

@@ -125,6 +125,13 @@ python -m app.main
 > `import app.xxx` 会失败。`main.py` 里的静态目录是相对项目根的 `app/html`，
 > 所以必须从项目根启动。
 
+> 注意：Windows 上必须用 `python -m app.main` 这个入口。uvicorn 0.36 起不再读
+> `asyncio` 的事件循环策略，它在 Windows 上默认挑 `ProactorEventLoop`，而 psycopg
+> 的异步模式用不了它，会直接报 `Psycopg cannot use the 'ProactorEventLoop'`。
+> `main.py` 里已经显式指定了 `loop="asyncio:SelectorEventLoop"`，换成命令行
+> `uvicorn app.main:app` 时要自己补上 `--loop asyncio:SelectorEventLoop`。
+> `python scripts/check_startup.py` 会在真正起服务这一层把这个坑验一遍。
+
 ---
 
 ## 接口
@@ -136,7 +143,8 @@ python -m app.main
 | GET | `/review` | **评审会页面**（跳转到静态页） |
 | POST | `/review/upload` | 上传 Word / PDF / txt，解析成纯文本（支持 multipart） |
 | POST | `/review/submit` | 提交方案文本，抽取要素表并落库 |
-| POST | `/review/meeting/stream` | **开评审会，SSE 推全过程**（结构化事件，带"谁接了谁的话"） |
+| POST | `/review/meeting/start` | **开评审会，SSE 推全过程**（结构化事件，带"谁接了谁的话"）；推到第一位评审提问就停 |
+| POST | `/review/meeting/answer` | **学生交回答**，同一个 SSE；把会议从检查点唤醒，接着开到下一个提问或散会（`skip=true` 表示跳过） |
 | GET | `/review/session/{session_id}` | 读回一次评审会 |
 
 ### 原有
@@ -152,10 +160,13 @@ python -m app.main
 
 | 脚本 | 验证内容 |
 |---|---|
+| `python scripts/check_startup.py` | **真起一次服务**（子进程 `python -m app.main`），验事件循环、路由、会话、页面 —— TestClient 抓不到的那一层 |
 | `python scripts/check_m1.py` | 三种文档解析、上传接口、要素抽取、落库与读回、错误码、原有路由回归 |
 | `python scripts/check_reviewers.py` | 四位评审出题，自动统计视角相似度、人设越界、一问多问 |
 | `python scripts/check_m3.py` | 评审会调度、交叉质询、防跑偏上限、SSE 事件顺序 |
-| `python scripts/check_page.py` | 页面路由、JS 语法、模板变量对账、前后端接口对账 |
+| `python scripts/check_m4.py` | 跨请求续接、跳过不追问、追问层数封顶、调度决策表与未答好清单归拢（后两项不调模型） |
+| `python scripts/check_page.py` | 两个页面的路由、标记、JS 语法、模板变量对账、前后端接口对账 |
+| `python scripts/check_memory.py` | 四层记忆、会话创建/复用/归属校验、PostgreSQL 检查点 |
 | `python scripts/make_sample_docs.py` | 重新生成测试素材（Word / PDF） |
 | `python scripts/make_requirements.py` | 按当前环境重新生成 requirements.txt |
 
@@ -193,7 +204,7 @@ python scripts/make_sample_docs.py
 | M1 | 方案提交（文本 / Word / PDF）+ 要素抽取 + 三张表 | ✅ 已验收 |
 | M2 | 4 位评审 persona + 顺序发言 + 视角去同质化 | ✅ 已验收 |
 | M3 | **交叉质询**（评审互相接话）+ 防跑偏上限 + SSE + 前端页面 | ✅ 已验收 |
-| M4 | **学生回答 + 追问（最多 2 层）** | 待开发 |
+| M4 | **学生回答 + 追问（最多 1 层）** + 跨请求续接（PostgreSQL 检查点） | ✅ 已验收 |
 
 本轮只做 M1~M4。会议纪要 / 未答好清单 / 四维雷达图 / 降级与演示固化等**暂不列入**，后续再议。
 
@@ -203,6 +214,6 @@ python scripts/make_sample_docs.py
 
 - **`question_bank` 表的数据需要自行准备**（题库），仓库里没有附带数据导出。
 - `speaker_node` 目前只有两层降级（本地模型 → 商业模型），两个都不可用时会抛异常。计划在 M6 补上"预设质询模板"兜底。
-- 记忆使用 LangGraph 的 `InMemorySaver`，重启后会话丢失；后续可换 PostgreSQL 持久化。
+- 会议状态存在 PostgreSQL 检查点里，重启不丢。模拟面试的四层记忆（窗口 / 摘要 / 长期 / 画像）另有实现，评审模块**不用**它 —— 理由见方案第六之一节。
 - 页面通过 CDN 加载 Vue，**断网会白屏**；现场演示前建议先把依赖本地化。
 - 本地 `qwen2.5:7b` 能跑通全链路，但接话内容质量在多次运行之间波动明显；正式演示建议走商业模型。

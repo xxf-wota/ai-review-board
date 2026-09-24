@@ -26,8 +26,8 @@ class PlanElementsSchema(BaseModel):
 class JudgeSchema(BaseModel):
     verdict: str = Field(..., description="判定结果，只在 resolved、partial、unresolved 三者中选择")
     severity: int = Field(..., description="这个问题的严重度，1 到 5，5 表示致命")
-    need_followup: bool = Field(..., description="是否需要追问第二层")
-    followup_question: str = Field(default="", description="需要追问时的问题，不需要则为空字符串")
+    need_followup: bool = Field(..., description="是否还需要追问（层数上限由 MAX_FOLLOWUP 控制，当前 1 层）")
+    followup_question: str = Field(default="", description="需要追问时往哪个点追，不需要则为空字符串")
     comment: str = Field(..., description="一句话说明判定理由")
 
 

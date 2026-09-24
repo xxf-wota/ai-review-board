@@ -5,12 +5,16 @@ from fastapi import APIRouter, Body, File, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse, StreamingResponse
 
 from app.ai.agent.review_agent.node.extract_node import extract_elements, format_elements
+from app.ai.agent.review_agent.node.judge_node import SKIP_MARK
 from app.ai.tool.plan_parser import parse_plan_bytes
 from app.ai.tool.review_dao import get_session, save_session
 
 """
 评审会接口
 收方案（文件或文本）、抽要素表并落库、把评审会过程用 SSE 推到前端
+
+评审会不是一个请求跑完的：问到学生头上就停下，等学生答完再唤醒接着开。
+所以是两个接口 —— /meeting/start 开场，/meeting/answer 交回答，都用同一个 session_id 串起来
 """
 review_router = APIRouter(prefix="/review", tags=["评审会"])
 
@@ -96,32 +100,12 @@ async def read_session(session_id: str):
 # 开一场评审会，用 SSE 把过程实时推到前端
 # 用 POST 而不是 EventSource：方案正文可能上万字，塞不进 URL
 # 前端要用 fetch + ReadableStream 来读
-@review_router.post("/meeting/stream")
-async def meeting_stream(request: Request, payload: dict = Body(...)):
-    session_id = (payload.get("session_id") or "").strip() or uuid4().hex
-    plan_text = (payload.get("plan_text") or "").strip()
-    max_round = int(payload.get("max_round") or 1)
-
-    # 方案正文和要素表都优先取库里的：提交阶段已经抽过要素，这里就不重复抽了
-    elements = payload.get("plan_elements") or {}
-    if not plan_text or not elements:
-        row = get_session(session_id)
-        if row:
-            plan_text = plan_text or (row.get("plan_text") or "")
-            elements = elements or (row.get("plan_elements") or {})
-
-    if not plan_text:
-        raise HTTPException(status_code=400, detail="没有找到方案正文，请先提交方案")
-
-    graph = request.app.state.review_agent
-    if graph is None:
-        raise HTTPException(status_code=503, detail="评审会智能体还没就绪，请稍后再试")
-
+# 推到"某位评审提出一个问题"就停，剩下的等学生回答
+def _sse(events):
+    """把图的事件流包成 SSE 响应。开场和答题两个接口共用这一段"""
     async def generate():
         try:
-            async for event in graph.run(
-                plan_text, session_id, max_round=max_round, plan_elements=elements
-            ):
+            async for event in events:
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
         except Exception as e:
             # 会议中途出错也要把错误推给前端，否则界面会一直转圈
@@ -140,6 +124,60 @@ async def meeting_stream(request: Request, payload: dict = Body(...)):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+def _review_agent(request: Request):
+    graph = request.app.state.review_agent
+    if graph is None:
+        raise HTTPException(status_code=503, detail="评审会智能体还没就绪，请稍后再试")
+    return graph
+
+
+@review_router.post("/meeting/start")
+async def meeting_start(request: Request, payload: dict = Body(...)):
+    session_id = (payload.get("session_id") or "").strip() or uuid4().hex
+    plan_text = (payload.get("plan_text") or "").strip()
+    max_round = int(payload.get("max_round") or 1)
+
+    # 方案正文和要素表都优先取库里的：提交阶段已经抽过要素，这里就不重复抽了
+    elements = payload.get("plan_elements") or {}
+    if not plan_text or not elements:
+        row = get_session(session_id)
+        if row:
+            plan_text = plan_text or (row.get("plan_text") or "")
+            elements = elements or (row.get("plan_elements") or {})
+
+    if not plan_text:
+        raise HTTPException(status_code=400, detail="没有找到方案正文，请先提交方案")
+
+    graph = _review_agent(request)
+    return _sse(graph.start(plan_text, session_id, max_round=max_round, plan_elements=elements))
+
+
+# 学生交回答，把会议从检查点唤醒，接着开到下一个提问或者散会
+# skip=true 表示这题不会，前端不用自己编一句"跳过"的文案
+@review_router.post("/meeting/answer")
+async def meeting_answer(request: Request, payload: dict = Body(...)):
+    session_id = (payload.get("session_id") or "").strip()
+    if not session_id:
+        raise HTTPException(status_code=400, detail="缺少 session_id，不知道这个回答要接到哪场评审会")
+
+    answer = SKIP_MARK if payload.get("skip") else (payload.get("answer") or "").strip()
+    graph = _review_agent(request)
+
+    # 先确认这场会议真的停在"等学生回答"上。
+    # 不校验的话，一个乱填的 session_id 会让图凭空从 START 开一场要素表为空的会；
+    # 会议已经散场了再交回答，也会把上一题的回答接到一个过期的状态上
+    values = await graph.snapshot_values(session_id)
+    if not values:
+        raise HTTPException(status_code=404, detail=f"没有找到评审会 {session_id}，请先开始评审会")
+    if values.get("meeting_phase") != "await_answer":
+        raise HTTPException(
+            status_code=409,
+            detail=f"这场评审会现在不在等学生回答（当前阶段：{values.get('meeting_phase')}）",
+        )
+
+    return _sse(graph.resume(session_id, answer))
 
 
 # 评审会页面。放在自己的路由里，就不用再去改默认页面路由那个文件

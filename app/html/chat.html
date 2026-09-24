@@ -702,9 +702,10 @@
                 ws:null,// websocket对象
                 chatList: [],
                 input: '请给我1道python题',
-                userId: 'user_' + Math.random().toString(36).substring(2, 8),
-                // 会话ID，由 /create_session 下发，带着它才能续上记忆
-                sessionId: '',
+                // 用户ID和会话ID都存一份到 sessionStorage（参考模板的做法），
+                // 刷新页面后还是同一个人、同一个会话，记忆才接得上
+                userId: sessionStorage.getItem('user_id') || ('user_' + Math.random().toString(36).substring(2, 8)),
+                sessionId: sessionStorage.getItem('session_id') || '',
                 historyList: [
                     // { id: 1, title: 'Vue响应式原理', messages: [] },
                     // { id: 2, title: '长列表性能优化', messages: [] },
@@ -715,41 +716,31 @@
                 eventSource: null,
             },
             mounted() {
+                // 用户ID先落一份到本地，刷新后还是同一个人，免得会话归属校验对不上
+                sessionStorage.setItem('user_id', this.userId);
                 // 页面打开就把会话建好，后面每句话都带着它，记忆才接得上
                 this.ensureSession();
-                // 初始化示例消息 (包含 Markdown 格式的 AI 回复)
-                this.historyList[0].messages = [
-                    { role: 'user', content: '请解释一下Vue的响应式原理' },
-                    { role: 'bot', content: '## Vue 响应式原理\n\nVue2 使用 `Object.defineProperty` 进行数据劫持，结合发布-订阅模式实现响应式。\n\n### 核心步骤：\n1. **数据劫持**：遍历 data 中的属性，用 `Object.defineProperty` 转换为 getter/setter\n2. **依赖收集**：在 getter 中收集 Watcher\n3. **派发更新**：在 setter 中通知 Watcher 更新视图\n\n> Vue3 则改用 `Proxy` 实现，支持更多数据类型和动态属性。' }
-                ];
-                this.historyList[1].messages = [
-                    { role: 'user', content: '长列表优化有哪些方法？' },
-                    { role: 'bot', content: '## 长列表优化方案\n\n- **虚拟滚动**：只渲染可视区域内的元素\n- **`v-once`**：对静态内容只渲染一次\n- **`v-memo` (Vue3)**：缓存子树，条件更新\n- **`Object.freeze`**：冻结不需要响应式的数据\n\n```js\n// 示例：使用 Object.freeze\nthis.list = Object.freeze(bigArray)\n```\n\n这样可以避免 Vue 对大数据进行响应式处理，提升性能。' }
-                ];
-                this.historyList[2].messages = [
-                    { role: 'user', content: 'CSS三栏布局' },
-                    { role: 'bot', content: '### CSS 三栏布局方案\n\n1. **Flexbox** (推荐)\n   ```css\n   .container { display: flex; }\n   .left, .right { width: 200px; }\n   .center { flex: 1; }\n   ```\n2. **Grid** (最简洁)\n   ```css\n   .container { display: grid; grid-template-columns: 200px 1fr 200px; }\n   ```\n3. **浮动 + 负边距** (传统方案)\n4. **绝对定位** (简单但不够灵活)' }
-                ];
-                this.historyList[3].messages = [
-                    { role: 'user', content: '前端工程化包括哪些？' },
-                    { role: 'bot', content: '## 前端工程化实践\n\n- **模块化**：ES Modules、CommonJS\n- **组件化**：Vue/React 组件体系\n- **规范化**：ESLint、Prettier、Git Hooks\n- **自动化构建**：Webpack、Vite、Rollup\n- **自动化测试**：Jest、Vitest、Cypress\n- **部署与监控**：CI/CD、Sentry、Prometheus' }
-                ];
-                this.loadHistoryMessages(0);
             },
             methods: {
                 // 创建/复用会话。会话由后端存在 Redis 里，带过期时间，
-                // 同一个 session_id 才能把多轮对话的记忆串起来
+                // 同一个 session_id 才能把多轮对话的记忆串起来。
+                // session_id 存 sessionStorage（参考模板的做法），刷新页面也不会丢
                 ensureSession() {
+                    // 内存里有就直接用
                     if (this.sessionId) return Promise.resolve(this.sessionId);
+                    // 本地存过就带上：后端校验通过就复用，过期或不是本人的会另发一个新的
+                    const saved = sessionStorage.getItem('session_id') || '';
                     return fetch('/create_session', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ user_id: this.userId })
+                        body: JSON.stringify({ user_id: this.userId, session_id: saved })
                     })
                         .then(r => r.json())
                         .then(res => {
                             this.sessionId = res.data || '';
-                            console.log('会话已创建：', this.sessionId);
+                            // 关键一步：存到本地，不然刷新一下就断片了
+                            sessionStorage.setItem('session_id', this.sessionId);
+                            console.log('会话已就绪：', this.sessionId, '|', res.msg);
                             return this.sessionId;
                         })
                         .catch(e => {
@@ -795,25 +786,24 @@
                 },
                 // 新建对话
                 newChat() {
-                    // 保存当前聊天到历史
-                    if (this.chatList.length > 0 && this.activeHistoryIndex !== null) {
+                    // 保存当前聊天到历史（historyList 里可能还没有这一条，要判空）
+                    const cur = this.historyList[this.activeHistoryIndex];
+                    if (cur) {
                         const firstUserMsg = this.chatList.find(m => m.role === 'user');
                         if (firstUserMsg) {
                             let title = firstUserMsg.content.trim().slice(0, 12);
                             if (title.length === 12) title += '…';
-                            this.historyList[this.activeHistoryIndex].title = title || '新对话';
+                            cur.title = title || '新对话';
                         }
-                        this.historyList[this.activeHistoryIndex].messages = this.chatList.map(msg => ({ ...msg }));
+                        cur.messages = this.chatList.map(msg => ({ ...msg }));
                     }
 
                     // 创建新历史
-                    const newId = this.historyList.length + 1;
-                    const newHistory = {
-                        id: newId,
+                    this.historyList.push({
+                        id: this.historyList.length + 1,
                         title: '新对话',
                         messages: []
-                    };
-                    this.historyList.push(newHistory);
+                    });
                     this.activeHistoryIndex = this.historyList.length - 1;
                     this.chatList = [];
                     this.input = '';
@@ -821,6 +811,10 @@
                         this.eventSource.close();
                         this.eventSource = null;
                     }
+                    // 新对话要开一个新会话，不然还挂在上一轮的窗口/摘要记忆上
+                    sessionStorage.removeItem('session_id');
+                    this.sessionId = '';
+                    this.ensureSession();
                     this.$nextTick(() => {
                         if (this.$refs.inputField) this.$refs.inputField.focus();
                     });
@@ -872,49 +866,36 @@
                         history.messages = this.chatList.map(msg => ({ ...msg }));
                     }
 
-                    // 准备 SSE 请求
-                    const params = `question=${encodeURIComponent(question)}&user_id=${encodeURIComponent(this.userId)}&session_id=${encodeURIComponent(this.sessionId || '')}`;
+                    // 准备 SSE 请求。会话ID以 sessionStorage 为准（和模板一致，
+                    // 模板里这里也是 sessionStorage.getItem('session_id')）。
+                    // 先等 ensureSession() 落地，否则页面刚打开就发言会漏进一个新会话
+                    this.ensureSession().then((sessionId) => {
+                        const params = `question=${encodeURIComponent(question)}&user_id=${encodeURIComponent(this.userId)}&session_id=${encodeURIComponent(sessionId)}`;
 
-                    if (this.eventSource) {
-                        this.eventSource.close();
-                        this.eventSource = null;
-                    }
+                        if (this.eventSource) {
+                            this.eventSource.close();
+                            this.eventSource = null;
+                        }
 
-                    const eve = new EventSource('/chat?' + params);
-                    this.eventSource = eve;
+                        const eve = new EventSource('/chat?' + params);
+                        this.eventSource = eve;
 
-                    const aiMsg = { role: 'bot', content: '正在思考，请稍等....' };
-                    this.chatList.push(aiMsg);
-                    // 添加机器人占位消息
-                    //const botMsgIndex = this.chatList.push({ role: 'bot', content: '' }) - 1;
+                        const aiMsg = { role: 'bot', content: '正在思考，请稍等....' };
+                        this.chatList.push(aiMsg);
 
-                    eve.onmessage = (e) => {
-
-                      const data = JSON.parse(e.data);
-                      if (data.done) {
-                          eve.close();
-                      } else {
-                          if (aiMsg.content.indexOf("正在思考") > -1) {
-                              aiMsg.content = "";
-                          }
-                          aiMsg.content += data.data;  // 追加文本片段
-                          this.scrollToBottom();
-                      }
-                    };
-
-                    // eve.onerror = (err) => {
-                    //     console.error('SSE 错误:', err);
-                    //     if (this.chatList[botMsgIndex] && this.chatList[botMsgIndex].content === '') {
-                    //         this.$set(this.chatList, botMsgIndex, {
-                    //             role: 'bot',
-                    //             content: '⚠️ 连接出错，请稍后重试。'
-                    //         });
-                    //     }
-                    //     eve.close();
-                    //     if (this.eventSource === eve) {
-                    //         this.eventSource = null;
-                    //     }
-                    // };
+                        eve.onmessage = (e) => {
+                            const data = JSON.parse(e.data);
+                            if (data.done) {
+                                eve.close();
+                            } else {
+                                if (aiMsg.content.indexOf("正在思考") > -1) {
+                                    aiMsg.content = "";
+                                }
+                                aiMsg.content += data.data;  // 追加文本片段
+                                this.scrollToBottom();
+                            }
+                        };
+                    });
                 },
                 // 滚动到底部
                 scrollToBottom() {

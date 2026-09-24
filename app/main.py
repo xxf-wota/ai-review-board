@@ -8,7 +8,6 @@ import uvicorn as uv
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 from app.ai.agent.memory.save.summary_memory import ensure_table, pool
@@ -22,7 +21,9 @@ from app.web.websocket_router.websocket_router import wb_router
 load_dotenv()
 DB_URI = os.getenv("POSTGRESQL_URL")
 
-# psycopg 的异步模式跑不了 Windows 默认的 ProactorEventLoop，必须换成 Selector
+# psycopg 的异步模式跑不了 Windows 默认的 ProactorEventLoop，必须换成 Selector。
+# 这一句管的是"别人帮我们建 loop"的场景（TestClient、脚本里的 asyncio.run）；
+# uvicorn 从 0.36 起不再读事件循环策略，它自己挑 loop_factory，所以在下面的 __main__ 里还要单独指定一次
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
@@ -41,8 +42,9 @@ async def content_manager(app: FastAPI):
         app.state.exam_agent = ExamGraphAgent(saver, r)
         print("AI模拟面试智能体启动成功")
 
-        # 评审会：图状态先用内存，等 M4 要跨请求续接时再换
-        app.state.review_agent = ReviewGraph(InMemorySaver())
+        # 评审会：学生回答是另一次请求，会议状态必须能从检查点续上，
+        # 所以不另起一套，直接用上面这个 saver（thread_id 各自独立，不会串）
+        app.state.review_agent = ReviewGraph(saver)
         print("AI交叉质询评审团启动成功")
 
         # 摘要记忆的连接池
@@ -72,4 +74,6 @@ app.mount("/static", StaticFiles(directory="app/html"), name="static")
 
 
 if __name__ == '__main__':
-    uv.run(app, host="localhost", port=8000)
+    # loop 写死成 asyncio:SelectorEventLoop：uvicorn 在 Windows 上默认给的是 ProactorEventLoop，
+    # psycopg 的异步模式直接报错起不来（策略那行对它无效，只能这样告诉它用哪个 loop）
+    uv.run(app, host="localhost", port=8000, loop="asyncio:SelectorEventLoop")
