@@ -5,16 +5,23 @@ from fastapi import APIRouter, Body, File, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse, StreamingResponse
 
 from app.ai.agent.review_agent.node.extract_node import extract_elements, format_elements
-from app.ai.agent.review_agent.node.judge_node import SKIP_MARK
+from app.ai.agent.review_agent.node.judge_node import SKIP_MARK, collect_unresolved
 from app.ai.tool.plan_parser import parse_plan_bytes
-from app.ai.tool.review_dao import get_session, save_session
+from app.ai.tool.review_dao import (
+    finish_session,
+    get_questions,
+    get_session,
+    save_questions,
+    save_session,
+)
 
 """
 评审会接口
 收方案（文件或文本）、抽要素表并落库、把评审会过程用 SSE 推到前端
 
 评审会不是一个请求跑完的：问到学生头上就停下，等学生答完再唤醒接着开。
-所以是两个接口 —— /meeting/start 开场，/meeting/answer 交回答，都用同一个 session_id 串起来
+所以是两个接口 —— /meeting/start 开场，/meeting/answer 交回答，都用同一个 session_id 串起来。
+散会时把会议纪要（质询记录）落库，/review/session/{id} 随时能读回来
 """
 review_router = APIRouter(prefix="/review", tags=["评审会"])
 
@@ -88,24 +95,45 @@ async def submit_plan(payload: dict = Body(...)):
     }
 
 
-# 读回一次评审会，用于前端刷新后恢复现场和排查问题
+# 读回一次评审会：基本信息 + 会议纪要（质询记录时间线）+ 未答好的问题清单
+# 前端刷新后恢复现场、排查线上问题，都靠这个接口
 @review_router.get("/session/{session_id}")
 async def read_session(session_id: str):
     data = get_session(session_id)
     if not data:
         raise HTTPException(status_code=404, detail=f"没有找到评审会 {session_id}")
+    questions = get_questions(session_id)
+    data["question_log"] = questions
+    # 未答好清单不单独存一张表，直接从质询记录推出来。
+    # 存两份迟早会不一致，推出来的永远和判定结果对得上
+    data["unresolved"] = collect_unresolved(questions)
     return data
 
 
-# 开一场评审会，用 SSE 把过程实时推到前端
-# 用 POST 而不是 EventSource：方案正文可能上万字，塞不进 URL
-# 前端要用 fetch + ReadableStream 来读
-# 推到"某位评审提出一个问题"就停，剩下的等学生回答
+# 会议一结束就把纪要落库：质询记录进 review_question，会话状态改 finished
+# 前端是边收流边渲染的，落库失败不该把已经开完的会毁掉，所以这里只打日志不往上抛
+def _save_minutes(event: dict) -> None:
+    session_id = event.get("session_id") or ""
+    log = event.get("question_log") or []
+    if not session_id or not log:
+        return
+    try:
+        save_questions(session_id, log)
+        rounds = [int(q.get("round") or 1) for q in log]
+        finish_session(session_id, max(rounds) if rounds else 1)
+        print(f"评审纪要已落库：{session_id}，{len(log)} 条")
+    except Exception as e:
+        print(f"-----------评审纪要落库失败：{e}------------")
+
+
+# 用 SSE 把过程实时推到前端。用 POST 而不是 EventSource：方案正文可能上万字，塞不进 URL，
+# 前端要用 fetch + ReadableStream 来读。开场和答题两个接口共用这一段
 def _sse(events):
-    """把图的事件流包成 SSE 响应。开场和答题两个接口共用这一段"""
     async def generate():
         try:
             async for event in events:
+                if isinstance(event, dict) and event.get("event") == "meeting_end":
+                    _save_minutes(event)
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
         except Exception as e:
             # 会议中途出错也要把错误推给前端，否则界面会一直转圈

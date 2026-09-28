@@ -3,6 +3,9 @@
 建评审会三张表：review_session / review_question / review_score
 读取同目录下的 init_review_tables.sql 执行，全部 IF NOT EXISTS，可重复运行
 执行后打印每张表的字段，确认真的建好了
+
+另外补一次增量迁移：CREATE TABLE IF NOT EXISTS 对已经建好的表不会加字段，
+所以后面新加的列要在这里单独补，否则老库跑起来会报 Unknown column
 """
 import os
 import sys
@@ -13,6 +16,13 @@ from app.ai.utils.mysql_util import get_mysql_conn
 
 SQL_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "init_review_tables.sql")
 TABLES = ["review_session", "review_question", "review_score"]
+
+# 后加的字段: (表, 字段, 建列语句)。已经有的库靠这里补上
+ADDED_COLUMNS = [
+    ("review_question", "verdict_comment",
+     "ALTER TABLE review_question ADD COLUMN verdict_comment VARCHAR(255) NOT NULL DEFAULT '' "
+     "COMMENT '判定理由，未答好清单里要显示' AFTER verdict"),
+]
 
 lines = []
 
@@ -36,6 +46,21 @@ def main():
         cur.execute(stmt)
     conn.commit()
     lines.append(f"已执行 {len(statements)} 条建表语句")
+
+    # 增量补列。MySQL 没有 ADD COLUMN IF NOT EXISTS（那是 MariaDB 的语法），
+    # 所以先查 information_schema 再决定要不要 ALTER
+    for table, column, ddl in ADDED_COLUMNS:
+        cur.execute(
+            "select count(*) from information_schema.columns "
+            "where table_schema = database() and table_name = %s and column_name = %s",
+            (table, column),
+        )
+        if cur.fetchone()[0]:
+            lines.append(f"【{table}.{column}】已存在，跳过")
+            continue
+        cur.execute(ddl)
+        conn.commit()
+        lines.append(f"【{table}.{column}】老库缺这一列，已补上")
 
     # 验证：表在不在、字段对不对
     cur.execute("show tables")

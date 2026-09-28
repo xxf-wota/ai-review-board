@@ -205,6 +205,91 @@
             margin-bottom: 10px;
         }
 
+        /* ---------- 会议纪要 / 未答好清单 ---------- */
+        .minutes .line {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .minutes .line:last-child { margin-bottom: 0; }
+
+        .minutes .idx {
+            flex-shrink: 0;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #eef2f7;
+            color: #5b6472;
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .minutes .line-body { flex: 1; min-width: 0; }
+
+        .minutes .line-head {
+            font-size: 12px;
+            color: #5b6472;
+            margin-bottom: 3px;
+        }
+
+        .minutes .line-q { word-break: break-word; }
+
+        .minutes .line-a {
+            color: #3a7bd5;
+            margin-top: 3px;
+            word-break: break-word;
+        }
+
+        /* 判定标签：绿 = 答清楚了，橙 = 答得不全，红 = 没答到点上 */
+        .minutes .verdict {
+            margin-left: 8px;
+            font-size: 11px;
+            padding: 1px 6px;
+            border-radius: 4px;
+            background: #eef2f7;
+            color: #5b6472;
+        }
+        .minutes .verdict.resolved { background: #e7f7ee; color: #2f9e5f; }
+        .minutes .verdict.partial { background: #fdf3e9; color: #c07a2b; }
+        .minutes .verdict.unresolved { background: #fdecea; color: #d93026; }
+
+        .unresolved .u {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .unresolved .u:last-child { margin-bottom: 0; }
+
+        .unresolved .sev {
+            flex-shrink: 0;
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            background: #fdecea;
+            color: #d93026;
+            font-size: 12px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .unresolved .u-body { flex: 1; min-width: 0; }
+        .unresolved .u-q { word-break: break-word; }
+
+        .unresolved .u-a {
+            color: #8a9099;
+            margin-top: 3px;
+            font-size: 12px;
+            word-break: break-word;
+        }
+
+        .unresolved .u-none { color: #2f9e5f; }
+
         .composer textarea {
             width: 100%;
             height: 76px;
@@ -349,6 +434,44 @@
             {{ summary.crossCount }} 次交叉质询 ·
             未答好 {{ summary.unresolvedCount }} 个
         </div>
+
+        <!-- 未答好的问题清单：本系统最终要交付的东西，按严重度排序 -->
+        <div v-if="summary" class="card unresolved">
+            <div class="title">未答好的问题清单（按严重度排序）</div>
+            <div v-if="!unresolved.length" class="u-none">
+                这一场全部答清楚了，没有未答好的问题。
+            </div>
+            <div class="u" v-for="(u, i) in unresolved" :key="i">
+                <span class="sev">{{ u.severity }}</span>
+                <div class="u-body">
+                    <div class="u-q">{{ nameOf(u.speaker_role) }}：{{ u.question }}</div>
+                    <div v-if="u.student_answer" class="u-a">你的回答：{{ u.student_answer }}</div>
+                    <div v-if="u.comment" class="u-a">{{ u.comment }}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 会议纪要：质询记录时间线，一行一条，比上面聊天气泡紧凑 -->
+        <div v-if="minutesLog.length" class="card minutes">
+            <div class="title">会议纪要 · 质询记录</div>
+            <div class="line" v-for="(m, i) in minutesLog" :key="i">
+                <span class="idx">{{ i + 1 }}</span>
+                <div class="line-body">
+                    <div class="line-head">
+                        {{ nameOf(m.speaker_role) }}
+                        <span v-if="m.question_type === 'cross'" class="reply">
+                            ⟶ 接 {{ nameOf(m.target_speaker) }} 的话
+                        </span>
+                        <span v-else-if="m.question_type === 'followup'" class="follow">↳ 追问</span>
+                        <span v-if="m.verdict" class="verdict" :class="m.verdict">
+                            {{ verdictText(m.verdict) }}
+                        </span>
+                    </div>
+                    <div class="line-q">{{ m.question }}</div>
+                    <div v-if="m.student_answer" class="line-a">学生：{{ m.student_answer }}</div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="composer">
@@ -417,7 +540,9 @@
             started: false,     // 评审会是否已经开始，决定下面显示"提交方案"还是"答题框"
             awaiting: false,    // 是否停在"等学生回答"
             awaitingName: '',   // 在等谁的问题
-            answerText: ''      // 答题框里的内容
+            answerText: '',     // 答题框里的内容
+            minutesLog: [],     // 会议纪要：质询记录时间线（散会时由后端给全）
+            unresolved: []      // 未答好的问题清单，已按严重度排好
         },
         computed: {
             statusText: function () {
@@ -437,6 +562,14 @@
             },
             isAbsent: function (v) {
                 return !v || v.indexOf('未提及') >= 0;
+            },
+
+            // 角色 -> 中文名。纪要里每条都要显示是谁说的
+            nameOf: function (role) {
+                var hit = this.reviewers.filter(function (r) {
+                    return r.role === role;
+                })[0];
+                return hit ? hit.name : (role || '评审');
             },
 
             // 有新发言就滚到底部，否则消息会堆到屏幕外
@@ -550,6 +683,8 @@
                 this.utterances = [];
                 this.current = null;
                 this.started = true;
+                this.minutesLog = [];
+                this.unresolved = [];
 
                 fetch('/review/meeting/start', {
                     method: 'POST',
@@ -617,6 +752,8 @@
                 this.utterances = [];
                 this.current = null;
                 this.summary = null;
+                this.minutesLog = [];
+                this.unresolved = [];
                 this.error = '';
                 this.status = '';
                 this.sessionId = '';
@@ -683,6 +820,9 @@
                         crossCount: crosses.length,
                         unresolvedCount: (e.unresolved || []).length
                     };
+                    // 纪要正文和未答好清单直接用散会事件里带的全量数据渲染，不用再请求一次
+                    this.minutesLog = log;
+                    this.unresolved = e.unresolved || [];
                     this.awaiting = false;
                     this.status = '评审会结束';
                     this.scrollToLatest();

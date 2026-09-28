@@ -36,10 +36,11 @@ MARKERS = [
 # 模板变量对账用的名单，要和 review.html 里 Vue 实例的定义保持一致
 DATA_KEYS = ["reviewers", "planText", "elements", "sessionId", "utterances",
              "current", "running", "error", "status", "summary",
-             "started", "awaiting", "awaitingName", "answerText"]
+             "started", "awaiting", "awaitingName", "answerText",
+             "minutesLog", "unresolved"]
 COMPUTED_KEYS = ["spokenRoles", "statusText"]
-METHOD_KEYS = ["listText", "isAbsent", "onFile", "submitPlan", "startMeeting", "handleEvent",
-               "submitAnswer", "pump", "verdictText", "restart"]
+METHOD_KEYS = ["listText", "isAbsent", "nameOf", "onFile", "submitPlan", "startMeeting",
+               "handleEvent", "submitAnswer", "pump", "verdictText", "restart"]
 
 # ---------- chat.html ----------
 # 会话必须落在 sessionStorage，刷新页面才接得上记忆（参考模板就是这么写的）
@@ -124,12 +125,16 @@ def main():
         for expr in exprs:
             # 先把字符串字面量剔掉，否则 'cross'、's' 这种会被当成变量名
             expr = re.sub(r"'[^']*'|\"[^\"]*\"", " ", expr)
-            for name in re.findall(r"[A-Za-z_$][\w$]*", expr):
-                idx = expr.find(name)
-                if idx > 0 and expr[idx - 1] == ".":
+            # 必须按"每一处出现"判断，不能用 expr.find(name)：
+            # 那样 {{ verdictText(m.verdict) }} 里的 verdict 会被定位到 verdictText 里，
+            # 于是属性名 verdict 被误判成未定义（踩过）
+            for hit in re.finditer(r"[A-Za-z_$][\w$]*", expr):
+                name = hit.group(0)
+                # 前面带点的说明是属性名（elements.goal 里的 goal）
+                if hit.start() > 0 and expr[hit.start() - 1] == ".":
                     continue
-                after = expr[idx + len(name):].lstrip()
-                if after.startswith(":"):
+                # 后面紧跟冒号的说明是对象字面量的键（{ on: ... } 里的 on）
+                if expr[hit.end():].lstrip().startswith(":"):
                     continue
                 used.add(name)
 
@@ -202,17 +207,30 @@ def main():
     log("\n" + "=" * 70)
     log("页面验收结论")
     log("=" * 70)
-    log(f"  /review 跳转          ：{'通过' if ok_route else '不通过'}")
-    log(f"  页面可取到且标记齐全  ：{'通过' if ok_file else '不通过'}")
-    log(f"  模板变量全部有定义    ：{'通过' if not unknown else '不通过，未定义 ' + str(unknown)}")
-    log(f"  前后端接口对账        ：{'通过' if not bad else '不通过，缺失 ' + str(bad)}")
-    log(f"  JS 语法（review）     ：{'通过' if ok_js else '不通过'}")
-    log(f"  / 跳转 chat.html      ：{'通过' if ok_chat_route else '不通过'}")
-    log(f"  会话存 sessionStorage ：{'通过' if ok_chat_file else '不通过'}")
-    log(f"  JS 语法（chat）       ：{'通过' if ok_chat_js else '不通过'}")
-    log(f"  chat 前后端对账       ：{'通过' if not chat_bad else '不通过，缺失 ' + str(chat_bad)}")
-    log(f"  会话复用分支被走到    ：{'通过' if ok_reuse else '不通过'}")
+    checks = [
+        ("/review 跳转          ", ok_route),
+        ("页面可取到且标记齐全  ", ok_file),
+        ("模板变量全部有定义    ", not unknown),
+        ("前后端接口对账        ", not bad),
+        ("JS 语法（review）     ", ok_js),
+        ("/ 跳转 chat.html      ", ok_chat_route),
+        ("会话存 sessionStorage ", ok_chat_file),
+        ("JS 语法（chat）       ", ok_chat_js),
+        ("chat 前后端对账       ", not chat_bad),
+        ("会话复用分支被走到    ", ok_reuse),
+    ]
+    for title, ok in checks:
+        log(f"  {title}：{'通过' if ok else '不通过'}")
+    if unknown:
+        log(f"    （未定义：{unknown}）")
+    if bad:
+        log(f"    （缺失接口：{bad}）")
+    if chat_bad:
+        log(f"    （chat 缺失接口：{chat_bad}）")
+
+    # 用退出码兜住结论：只看 exit code 的场合（比如连跑一串验收脚本）不能永远返回 0
+    return all(ok for _, ok in checks)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(0 if main() else 1)

@@ -106,6 +106,11 @@ cp .env.example .env
 python scripts/init_review_db.py
 ```
 
+> **老库升级也走这个脚本。** `CREATE TABLE IF NOT EXISTS` 对已经建好的表什么都不做，
+> 所以后面新加的列（比如 M5 的 `verdict_comment`）由脚本里那步增量迁移补上 —— MySQL 没有
+> `ADD COLUMN IF NOT EXISTS`，它是先查 `information_schema` 再决定要不要 ALTER。
+> 拉完新代码先跑一次它，别直接启动服务。
+
 ### 4. 启动
 
 **在项目根目录**执行：
@@ -145,7 +150,7 @@ python -m app.main
 | POST | `/review/submit` | 提交方案文本，抽取要素表并落库 |
 | POST | `/review/meeting/start` | **开评审会，SSE 推全过程**（结构化事件，带"谁接了谁的话"）；推到第一位评审提问就停 |
 | POST | `/review/meeting/answer` | **学生交回答**，同一个 SSE；把会议从检查点唤醒，接着开到下一个提问或散会（`skip=true` 表示跳过） |
-| GET | `/review/session/{session_id}` | 读回一次评审会 |
+| GET | `/review/session/{session_id}` | 读回一次评审会：基本信息 + **会议纪要（质询记录时间线）** + **未答好的问题清单** |
 
 ### 原有
 
@@ -165,6 +170,7 @@ python -m app.main
 | `python scripts/check_reviewers.py` | 四位评审出题，自动统计视角相似度、人设越界、一问多问 |
 | `python scripts/check_m3.py` | 评审会调度、交叉质询、防跑偏上限、SSE 事件顺序 |
 | `python scripts/check_m4.py` | 跨请求续接、跳过不追问、追问层数封顶、调度决策表与未答好清单归拢（后两项不调模型） |
+| `python scripts/check_m5.py` | 会议纪要落库与读回、未答好清单排序、DAO 字段映射与重开不叠加 |
 | `python scripts/check_page.py` | 两个页面的路由、标记、JS 语法、模板变量对账、前后端接口对账 |
 | `python scripts/check_memory.py` | 四层记忆、会话创建/复用/归属校验、PostgreSQL 检查点 |
 | `python scripts/make_sample_docs.py` | 重新生成测试素材（Word / PDF） |
@@ -205,8 +211,9 @@ python scripts/make_sample_docs.py
 | M2 | 4 位评审 persona + 顺序发言 + 视角去同质化 | ✅ 已验收 |
 | M3 | **交叉质询**（评审互相接话）+ 防跑偏上限 + SSE + 前端页面 | ✅ 已验收 |
 | M4 | **学生回答 + 追问（最多 1 层）** + 跨请求续接（PostgreSQL 检查点） | ✅ 已验收 |
+| M5 | **会议纪要（质询记录时间线）+ 未答好的问题清单**（落库可回看） | ✅ 已验收 |
 
-本轮只做 M1~M4。会议纪要 / 未答好清单 / 四维雷达图 / 降级与演示固化等**暂不列入**，后续再议。
+本轮做 M1~M5。四维雷达图 / 导出 / 降级与演示固化**不列入**，后续再议。
 
 ---
 

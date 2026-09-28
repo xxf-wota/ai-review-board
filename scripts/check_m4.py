@@ -310,7 +310,9 @@ async def main():
     log(f"  场景 A 跨请求续接 + 跳过不追问：{'通过' if a_ok else '不通过'}")
     log(f"  场景 B 追问与层数封顶        ：{'通过' if b_ok else '不通过'}")
     log(f"  场景 C 硬规则（无模型）      ：{'通过' if c_ok else '不通过'}")
+    # 用退出码兜住结论：只看 exit code 的场合不能永远返回 0
+    return a_ok and b_ok and c_ok
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    sys.exit(0 if asyncio.run(main()) else 1)

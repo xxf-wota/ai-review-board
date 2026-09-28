@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS review_question (
   question       TEXT         NOT NULL COMMENT '评审提出的问题',
   student_answer TEXT         COMMENT '学生的回答',
   verdict        VARCHAR(32)  NOT NULL DEFAULT '' COMMENT 'resolved 答好了 / partial 答偏了 / unresolved 没答',
+  verdict_comment VARCHAR(255) NOT NULL DEFAULT '' COMMENT '判定理由，未答好清单里要显示',
   severity       INT          NOT NULL DEFAULT 0 COMMENT '严重度 1~5',
   followup_depth INT          NOT NULL DEFAULT 0 COMMENT '追问层数',
   created_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
