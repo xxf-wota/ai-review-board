@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-建评审会三张表：review_session / review_question / review_score
+建评审会两张表：review_session / review_question
 读取同目录下的 init_review_tables.sql 执行，全部 IF NOT EXISTS，可重复运行
 执行后打印每张表的字段，确认真的建好了
 
@@ -15,7 +15,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.ai.utils.mysql_util import get_mysql_conn
 
 SQL_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "init_review_tables.sql")
-TABLES = ["review_session", "review_question", "review_score"]
+TABLES = ["review_session", "review_question"]
+# 已经不用的表，留着只会让人以为它还在生效，启动时顺手删掉
+DROPPED_TABLES = ["review_score"]
 
 # 后加的字段: (表, 字段, 建列语句)。已经有的库靠这里补上
 ADDED_COLUMNS = [
@@ -62,6 +64,29 @@ def main():
         conn.commit()
         lines.append(f"【{table}.{column}】老库缺这一列，已补上")
 
+    # 顺手清掉已经不用的表（四维诊断那部分砍掉了，review_score 从没写过数据）
+    cur.execute("show tables")
+    tables_now = {r[0] for r in cur.fetchall()}
+    lines.append("")
+    for table in DROPPED_TABLES:
+        if table in tables_now:
+            cur.execute(f"drop table `{table}`")
+            conn.commit()
+            lines.append(f"【{table}】已废弃，已删除")
+        else:
+            lines.append(f"【{table}】本来就没有，跳过")
+
+    # 验收脚本留下的孤儿记录：review_question 里有、但 review_session 里没有这场会，
+    # 说明是"直接调 /meeting/start 没先提交方案"的测试残留，留着只会污染统计
+    cur.execute(
+        "delete q from review_question q "
+        "left join review_session s on s.session_id = q.session_id "
+        "where s.session_id is null"
+    )
+    conn.commit()
+    if cur.rowcount:
+        lines.append(f"已清理验收脚本遗留的孤儿质询记录 {cur.rowcount} 行")
+
     # 验证：表在不在、字段对不对
     cur.execute("show tables")
     existing = {r[0] for r in cur.fetchall()}
@@ -81,7 +106,7 @@ def main():
     cur.close()
     conn.close()
 
-    with open("data/_m1_tables.txt", "w", encoding="utf-8") as f:
+    with open("data/_tables.txt", "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
     print("init review tables done")
 

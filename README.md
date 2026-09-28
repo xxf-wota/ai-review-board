@@ -54,7 +54,7 @@ app/
       review/               # 四位评审人设 + 要素抽取规则（yaml）
     tool/
       plan_parser.py        # Word / PDF / txt → 纯文本
-      review_dao.py         # 评审会三张表的读写
+      review_dao.py         # 评审会两张表的读写
   web/
     review_router/          # 评审会接口
     chat_router/            # 原有：聊天与流式接口
@@ -102,13 +102,14 @@ cp .env.example .env
 
 ```bash
 # 原有模块需要 question_bank / user_info 两张表
-# 评审会模块的三张表由这个脚本创建，可重复执行
+# 评审会模块的两张表由这个脚本创建，可重复执行
 python scripts/init_review_db.py
 ```
 
 > **老库升级也走这个脚本。** `CREATE TABLE IF NOT EXISTS` 对已经建好的表什么都不做，
 > 所以后面新加的列（比如 M5 的 `verdict_comment`）由脚本里那步增量迁移补上 —— MySQL 没有
 > `ADD COLUMN IF NOT EXISTS`，它是先查 `information_schema` 再决定要不要 ALTER。
+> 它顺带还会**删掉已废弃的 `review_score` 表**、清掉测试残留的孤儿记录。
 > 拉完新代码先跑一次它，别直接启动服务。
 
 ### 4. 启动
@@ -179,40 +180,22 @@ python -m app.main
 | 脚本 | 验证内容 |
 |---|---|
 | `python scripts/check_startup.py` | **真起一次服务**（子进程 `python -m app.main`），验事件循环、路由、会话、页面 —— TestClient 抓不到的那一层 |
-| `python scripts/check_m1.py` | 三种文档解析、上传接口、要素抽取、落库与读回、错误码、原有路由回归 |
-| `python scripts/check_reviewers.py` | 四位评审出题，自动统计视角相似度、人设越界、一问多问 |
-| `python scripts/check_m3.py` | 评审会调度、交叉质询、防跑偏上限、SSE 事件顺序 |
-| `python scripts/check_m4.py` | 跨请求续接、跳过不追问、追问层数封顶、调度决策表与未答好清单归拢（后两项不调模型） |
-| `python scripts/check_m5.py` | 会议纪要落库与读回、未答好清单排序、DAO 字段映射与重开不叠加 |
 | `python scripts/check_page.py` | 单页应用：两个入口路由、标记齐全、旧页面确实删了、JS 语法、模板变量对账、前后端接口对账、气泡对齐不变式 |
-| `python scripts/check_memory.py` | 四层记忆、会话创建/复用/归属校验、PostgreSQL 检查点 |
-| `python scripts/make_sample_docs.py` | 重新生成测试素材（Word / PDF） |
-| `python scripts/make_requirements.py` | 按当前环境重新生成 requirements.txt |
+| `python scripts/init_review_db.py` | 建评审会两张表 + 增量补列 + 清掉废弃表与测试残留 |
 
-验收脚本会在 `data/` 下写实测报告；`check_m1.py` 还会自动清理自己写进数据库的测试数据。
+验收脚本会在 `data/` 下写报告。
+**M1~M5 的实测数据都留在 `docs/选题方案` 里**，那些验证脚本按答辩需要精简掉了 —— 现场演示时人工走一遍流程即可。
 
 ---
 
 ## 测试样本
 
-`data/` 下有两份示例方案，**各自提供 txt / docx / pdf 三种格式**，可以直接拖到页面底部上传：
+`data/` 下有两份示例方案，**各自提供 txt / docx / pdf 三种格式**，可以直接拖到页面里上传：
 
 | 样本 | 说明 |
 |---|---|
 | `demo_plan.*` | 校园二手教材交易平台，信息写得比较全，基础样本 |
 | `sample_plan_eldercare.*` | 社区居家养老系统，**技术 / 成本 / 合规 / 用户四个维度都留了破绽**，用来测评审效果 |
-
-也可以指定样本单独跑四位评审：
-
-```bash
-python scripts/check_reviewers.py data/sample_plan_eldercare.txt
-```
-
-样本可以随时重新生成（Word 用 python-docx，PDF 用无头 Chrome 渲染，中文能正常嵌入）：
-
-```bash
-python scripts/make_sample_docs.py
-```
 
 ---
 
@@ -220,7 +203,7 @@ python scripts/make_sample_docs.py
 
 | 阶段 | 内容 | 状态 |
 |---|---|---|
-| M1 | 方案提交（文本 / Word / PDF）+ 要素抽取 + 三张表 | ✅ 已验收 |
+| M1 | 方案提交（文本 / Word / PDF）+ 要素抽取 + 两张表 | ✅ 已验收 |
 | M2 | 4 位评审 persona + 顺序发言 + 视角去同质化 | ✅ 已验收 |
 | M3 | **交叉质询**（评审互相接话）+ 防跑偏上限 + SSE + 前端页面 | ✅ 已验收 |
 | M4 | **学生回答 + 追问（最多 1 层）** + 跨请求续接（PostgreSQL 检查点） | ✅ 已验收 |

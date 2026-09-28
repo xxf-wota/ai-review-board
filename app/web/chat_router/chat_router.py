@@ -1,16 +1,10 @@
-from fastapi import APIRouter, Request, WebSocket
+from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 import json
 
-from app.test.test_agent import test_agent
-from app.ai.agent.vosk_agent import VostAgent
-
 chat_router = APIRouter()
-
-# 创建语音识别实例
-# vosk_agent = VostAgent.get_vosk()
 
 
 class SessionSchema(BaseModel):
@@ -68,16 +62,3 @@ async def chat(request: Request, question: str, user_id: str = "1", session_id: 
             yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")
-
-
-# 语音识别接口
-# @chat_router.websocket("/vosk")
-# async def vosk(ws: WebSocket):
-#     try:
-#         # 第一次握手
-#         await ws.accept()
-#         print("第一次握手，创建链接")
-#         # 开启语音
-#         await vosk_agent.speak(ws)
-#     except Exception as e:
-#         print("异常:", e)

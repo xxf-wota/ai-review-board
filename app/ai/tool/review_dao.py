@@ -4,7 +4,7 @@ from app.ai.utils.mysql_util import get_mysql_conn
 
 """
 评审会数据访问
-只负责读写 review_session / review_question / review_score 三张表
+只负责读写 review_session / review_question 两张表
 """
 
 

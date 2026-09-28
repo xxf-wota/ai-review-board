@@ -35,15 +35,3 @@ CREATE TABLE IF NOT EXISTS review_question (
   PRIMARY KEY (id),
   KEY idx_session_round (session_id, round)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='质询记录';
-
--- 能力诊断
-CREATE TABLE IF NOT EXISTS review_score (
-  session_id   VARCHAR(64) NOT NULL,
-  feasibility  INT         NOT NULL DEFAULT 0 COMMENT '可行性',
-  completeness INT         NOT NULL DEFAULT 0 COMMENT '完备性',
-  rigor        INT         NOT NULL DEFAULT 0 COMMENT '严谨性',
-  expression   INT         NOT NULL DEFAULT 0 COMMENT '表达',
-  summary      TEXT        COMMENT '一句话总评',
-  created_at   DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (session_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='能力诊断';
