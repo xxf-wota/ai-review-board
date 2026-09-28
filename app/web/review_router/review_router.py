@@ -208,7 +208,7 @@ async def meeting_answer(request: Request, payload: dict = Body(...)):
     return _sse(graph.resume(session_id, answer))
 
 
-# 评审会页面。放在自己的路由里，就不用再去改默认页面路由那个文件
+# 评审会页面。两个智能体现在共用一个页面，这里带上 tab 参数直接落到评审团那一侧
 @review_router.get("")
 def review_page():
-    return RedirectResponse(url="/static/review.html")
+    return RedirectResponse(url="/static/app.html?tab=review")

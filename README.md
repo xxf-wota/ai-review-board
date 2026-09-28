@@ -58,7 +58,7 @@ app/
   web/
     review_router/          # 评审会接口
     chat_router/            # 原有：聊天与流式接口
-  html/                     # 前端页面（Vue2 CDN 单文件）
+  html/                     # 前端：app.html（单页，两个智能体共用一套外壳）
   main.py                   # 入口
 data/                       # 测试方案样本
 docs/                       # 选题方案与实测记录
@@ -121,10 +121,17 @@ python -m app.main
 
 服务跑在 http://localhost:8000 ，接口文档在 http://localhost:8000/docs 。
 
-| 页面 | 地址 |
-|---|---|
-| 模拟面试 | http://localhost:8000/ |
-| **评审会** | http://localhost:8000/review |
+**两个智能体现在是同一个页面里的两个界面**（左侧栏顶部切换），默认进模拟面试：
+
+| 界面 | 地址 | 说明 |
+|---|---|---|
+| **模拟面试**（默认） | http://localhost:8000/ | 多轮问答，带四层记忆 |
+| **交叉质询评审团** | http://localhost:8000/review | 同一个页面，带上 `?tab=review` 直接落到评审团 |
+
+> 页面是 ChatGPT 那种布局：左边一条窄侧栏（切智能体 + 历史记录），右边居中的消息流，
+> 底部圆角输入框。历史记录存在浏览器 `localStorage` 里 —— 后端本来就按 `session_id`
+> 记得上下文，所以刷新、关掉重开都能接回上一场；评审会开完的记录还能从库里读回来只读回看。
+> **清掉浏览器数据 = 清掉侧栏列表**，但库里的评审记录和 Redis 里的会话记忆都还在。
 
 > 注意：不要用 `python app/main.py`。那样 `sys.path` 会变成 `app/` 目录，
 > `import app.xxx` 会失败。`main.py` 里的静态目录是相对项目根的 `app/html`，
@@ -141,23 +148,29 @@ python -m app.main
 
 ## 接口
 
-### 评审会（新增）
+### 页面（两个智能体共用一个单页应用）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/review` | **评审会页面**（跳转到静态页） |
+| GET | `/` | **模拟面试界面**（重定向到 `/static/app.html`） |
+| GET | `/review` | **交叉质询评审团界面**（同一个页面，带 `?tab=review`） |
+
+### 评审会
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
 | POST | `/review/upload` | 上传 Word / PDF / txt，解析成纯文本（支持 multipart） |
 | POST | `/review/submit` | 提交方案文本，抽取要素表并落库 |
 | POST | `/review/meeting/start` | **开评审会，SSE 推全过程**（结构化事件，带"谁接了谁的话"）；推到第一位评审提问就停 |
 | POST | `/review/meeting/answer` | **学生交回答**，同一个 SSE；把会议从检查点唤醒，接着开到下一个提问或散会（`skip=true` 表示跳过） |
 | GET | `/review/session/{session_id}` | 读回一次评审会：基本信息 + **会议纪要（质询记录时间线）** + **未答好的问题清单** |
 
-### 原有
+### 模拟面试（原有）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/` | 默认页面 |
-| GET | `/chat` | SSE 流式对话与出题 |
+| POST | `/create_session` | 建会话 / 校验并复用已有会话 |
+| GET | `/chat` | SSE 流式对话与出题（带 `session_id` 才接得上记忆） |
 
 ---
 
@@ -171,7 +184,7 @@ python -m app.main
 | `python scripts/check_m3.py` | 评审会调度、交叉质询、防跑偏上限、SSE 事件顺序 |
 | `python scripts/check_m4.py` | 跨请求续接、跳过不追问、追问层数封顶、调度决策表与未答好清单归拢（后两项不调模型） |
 | `python scripts/check_m5.py` | 会议纪要落库与读回、未答好清单排序、DAO 字段映射与重开不叠加 |
-| `python scripts/check_page.py` | 两个页面的路由、标记、JS 语法、模板变量对账、前后端接口对账 |
+| `python scripts/check_page.py` | 单页应用：两个入口路由、标记齐全、旧页面确实删了、JS 语法、模板变量对账、前后端接口对账、气泡对齐不变式 |
 | `python scripts/check_memory.py` | 四层记忆、会话创建/复用/归属校验、PostgreSQL 检查点 |
 | `python scripts/make_sample_docs.py` | 重新生成测试素材（Word / PDF） |
 | `python scripts/make_requirements.py` | 按当前环境重新生成 requirements.txt |

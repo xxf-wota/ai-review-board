@@ -1,0 +1,1311 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 答辩陪练 · 模拟面试 / 交叉质询评审团</title>
+    <!-- Vue2 CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.7.14/dist/vue.js"></script>
+    <!-- Markdown 解析，只有模拟面试那边用得上 -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        /*
+         * 界面参考 ChatGPT：左边一条窄侧栏（切智能体 + 历史记录），右边一条居中的消息流，
+         * 底部一个圆角输入框。两个智能体共用这套外壳，只换中间的内容和底部的输入区。
+         */
+        * { box-sizing: border-box; }
+
+        :root {
+            --line: #e5e5e5;
+            --text: #0d0d0d;
+            --muted: #8e8e8e;
+            --side: #f9f9f9;
+            --hover: #ececec;
+            --accent: #4a8cf7;
+            --danger: #d93026;
+        }
+
+        body {
+            margin: 0;
+            height: 100vh;
+            overflow: hidden;
+            color: var(--text);
+            background: #fff;
+            font-family: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", system-ui, sans-serif;
+        }
+
+        .layout { display: flex; height: 100vh; }
+
+        /* ---------- 左侧栏 ---------- */
+        .sidebar {
+            width: 260px;
+            flex-shrink: 0;
+            background: var(--side);
+            border-right: 1px solid var(--line);
+            display: flex;
+            flex-direction: column;
+            padding: 12px 10px;
+            gap: 10px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 8px 2px;
+            font-weight: 600;
+            font-size: 15px;
+        }
+
+        .brand .logo {
+            width: 24px;
+            height: 24px;
+            border-radius: 7px;
+            background: var(--accent);
+            color: #fff;
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* 两个智能体：用按钮分开，当前那个高亮 */
+        .modes { display: flex; flex-direction: column; gap: 4px; }
+
+        .modes button {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            text-align: left;
+            padding: 9px 10px;
+            border: 1px solid transparent;
+            border-radius: 10px;
+            background: transparent;
+            color: var(--text);
+            font-family: inherit;
+            font-size: 13.5px;
+            cursor: pointer;
+        }
+
+        .modes button:hover { background: var(--hover); }
+
+        .modes button.on {
+            background: #fff;
+            border-color: var(--line);
+            font-weight: 600;
+        }
+
+        .modes .ico { font-size: 15px; }
+
+        .new-btn {
+            padding: 9px 10px;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            background: #fff;
+            color: var(--text);
+            font-family: inherit;
+            font-size: 13.5px;
+            cursor: pointer;
+            text-align: left;
+        }
+
+        .new-btn:hover { background: var(--hover); }
+        .new-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+        .history {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            margin-top: 2px;
+        }
+
+        .hist {
+            padding: 8px 10px;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #444;
+            cursor: pointer;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .hist:hover { background: var(--hover); }
+        .hist.on { background: #fff; border: 1px solid var(--line); color: var(--text); }
+        .hist.empty { color: var(--muted); cursor: default; }
+        .hist.empty:hover { background: transparent; }
+
+        .user-tag {
+            font-size: 12px;
+            color: var(--muted);
+            padding: 8px 10px 2px;
+            border-top: 1px solid var(--line);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* ---------- 右侧主区 ---------- */
+        .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+        .topbar {
+            padding: 14px 24px 10px;
+            border-bottom: 1px solid var(--line);
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+            flex-shrink: 0;
+        }
+
+        .topbar h1 { margin: 0; font-size: 15px; font-weight: 600; }
+        .topbar .sub { font-size: 12px; color: var(--muted); }
+
+        .thread { flex: 1; overflow-y: auto; }
+
+        .thread-inner {
+            max-width: 760px;
+            margin: 0 auto;
+            padding: 26px 24px 8px;
+        }
+
+        .hint {
+            text-align: center;
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 2;
+            padding: 60px 20px;
+        }
+
+        .hint h2 {
+            font-size: 20px;
+            color: var(--text);
+            margin: 0 0 8px;
+            font-weight: 600;
+        }
+
+        /* ---------- 模拟面试的消息 ---------- */
+        /* 用户：右侧灰底气泡；AI：左侧通栏正文（和 ChatGPT 一样） */
+        .row { display: flex; margin-bottom: 20px; }
+        .row.user { justify-content: flex-end; }
+
+        .bubble-user {
+            background: #f4f4f4;
+            border-radius: 18px;
+            padding: 10px 16px;
+            font-size: 14.5px;
+            line-height: 1.75;
+            max-width: 78%;
+            word-break: break-word;
+            white-space: pre-wrap;
+        }
+
+        .md {
+            font-size: 14.5px;
+            line-height: 1.8;
+            word-break: break-word;
+            max-width: 100%;
+        }
+
+        .md p { margin: 0 0 .7rem; }
+        .md p:last-child { margin-bottom: 0; }
+        .md h1, .md h2, .md h3, .md h4 { margin: .9rem 0 .4rem; font-weight: 600; line-height: 1.35; }
+        .md h1 { font-size: 1.3rem; }
+        .md h2 { font-size: 1.15rem; }
+        .md h3 { font-size: 1.02rem; }
+        .md ul, .md ol { margin: .4rem 0 .7rem 1.3rem; padding-left: .7rem; }
+        .md li { margin-bottom: .25rem; }
+        .md code {
+            background: #f0f0f0;
+            border-radius: 5px;
+            padding: 1px 5px;
+            font-family: 'JetBrains Mono', Consolas, monospace;
+            font-size: .87em;
+        }
+        .md pre {
+            background: #f7f7f8;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 12px 14px;
+            overflow-x: auto;
+        }
+        .md pre code { background: transparent; padding: 0; }
+        .md blockquote {
+            margin: .6rem 0;
+            padding: .4rem 1rem;
+            border-left: 3px solid #d5d5d5;
+            color: #555;
+        }
+        .md table { border-collapse: collapse; margin: .6rem 0; font-size: .9em; }
+        .md th, .md td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; }
+        .md th { background: #fafafa; }
+
+        /* 流式输出时的光标 */
+        .md.streaming::after {
+            content: "▍";
+            color: var(--muted);
+            animation: blink 1s steps(2) infinite;
+        }
+        @keyframes blink { 50% { opacity: 0; } }
+
+        /* ---------- 评审会的消息 ---------- */
+        .msg { display: flex; gap: 10px; margin-bottom: 18px; }
+
+        .avatar {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            color: #fff;
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            letter-spacing: .5px;
+        }
+
+        .msg .body { min-width: 0; flex: 1; }
+        .msg .name { font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+
+        .msg .bubble {
+            display: inline-block;
+            background: #f4f4f4;
+            border-radius: 14px;
+            padding: 10px 14px;
+            font-size: 14px;
+            line-height: 1.75;
+            max-width: 100%;
+            word-break: break-word;
+        }
+
+        /* 接话的气泡换个底色，一眼能分出来 */
+        .msg.cross .bubble { background: #fdf3e9; border: 1px solid #f3ddc6; }
+
+        /* 当前在等学生回答的那一条：描蓝边 + 挂个标。
+           一个议题里可能好几位评审问了话，必须一眼看出现在该答哪条 */
+        .msg.pending .bubble {
+            border: 1px solid var(--accent);
+            box-shadow: 0 0 0 3px rgba(74, 140, 247, .12);
+        }
+
+        .msg.pending .name::after {
+            content: " ⟵ 请回答这一条";
+            color: var(--accent);
+        }
+
+        /* 学生自己的回答：靠右，和模拟面试那边保持一致 */
+        .msg.student { flex-direction: row-reverse; }
+        .msg.student .body { text-align: right; }
+        .msg.student .bubble {
+            background: var(--accent);
+            color: #fff;
+            text-align: left;
+        }
+
+        .msg.streaming .bubble::after {
+            content: "▍";
+            color: var(--muted);
+            animation: blink 1s steps(2) infinite;
+        }
+
+        .reply { color: #e07b39; margin-left: 6px; }
+        .follow { color: var(--accent); margin-left: 6px; }
+
+        /* 判定结论：居中一行小字 */
+        .note {
+            text-align: center;
+            font-size: 12px;
+            color: var(--muted);
+            margin: -8px 0 18px;
+            line-height: 1.8;
+        }
+
+        /* ---------- 卡片（要素表 / 纪要 / 未答好清单） ---------- */
+        .card {
+            background: #fafbfc;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 14px 16px;
+            margin-bottom: 18px;
+            font-size: 13px;
+            line-height: 1.9;
+        }
+
+        .card .title { font-size: 13px; font-weight: 600; margin-bottom: 10px; }
+        .card .row2 { display: flex; gap: 8px; }
+        .card .k { color: var(--muted); width: 76px; flex-shrink: 0; }
+        .card .v { flex: 1; min-width: 0; word-break: break-word; }
+        .card .v.missing { color: var(--danger); }
+
+        .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+        .tags span {
+            background: #fdecea;
+            color: var(--danger);
+            border-radius: 4px;
+            padding: 1px 8px;
+            font-size: 12px;
+        }
+
+        .summary {
+            text-align: center;
+            font-size: 12px;
+            color: var(--muted);
+            margin: 4px 0 18px;
+        }
+
+        /* 会议纪要时间线 */
+        .minutes .line { display: flex; gap: 8px; margin-bottom: 12px; }
+        .minutes .line:last-child { margin-bottom: 0; }
+
+        .minutes .idx {
+            flex-shrink: 0;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #eef2f7;
+            color: #5b6472;
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .minutes .line-body { flex: 1; min-width: 0; }
+        .minutes .line-head { font-size: 12px; color: #5b6472; margin-bottom: 3px; }
+        .minutes .line-q { word-break: break-word; }
+        .minutes .line-a { color: #3a7bd5; margin-top: 3px; word-break: break-word; }
+
+        .minutes .verdict {
+            margin-left: 8px;
+            font-size: 11px;
+            padding: 1px 6px;
+            border-radius: 4px;
+            background: #eef2f7;
+            color: #5b6472;
+        }
+        .minutes .verdict.resolved { background: #e7f7ee; color: #2f9e5f; }
+        .minutes .verdict.partial { background: #fdf3e9; color: #c07a2b; }
+        .minutes .verdict.unresolved { background: #fdecea; color: var(--danger); }
+
+        /* 未答好清单 */
+        .unresolved .u { display: flex; gap: 8px; margin-bottom: 12px; }
+        .unresolved .u:last-child { margin-bottom: 0; }
+
+        .unresolved .sev {
+            flex-shrink: 0;
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            background: #fdecea;
+            color: var(--danger);
+            font-size: 12px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .unresolved .u-body { flex: 1; min-width: 0; }
+        .unresolved .u-q { word-break: break-word; }
+        .unresolved .u-a { color: var(--muted); margin-top: 3px; font-size: 12px; word-break: break-word; }
+        .unresolved .u-none { color: #2f9e5f; }
+
+        /* ---------- 底部输入区 ---------- */
+        .composer { padding: 10px 24px 18px; flex-shrink: 0; }
+        .composer-inner { max-width: 760px; margin: 0 auto; }
+
+        .box {
+            border: 1px solid #d9d9d9;
+            border-radius: 22px;
+            padding: 8px 8px 8px 16px;
+            display: flex;
+            align-items: flex-end;
+            gap: 8px;
+            background: #fff;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, .04);
+        }
+
+        .box:focus-within { border-color: #b9b9b9; }
+        .box.col { flex-direction: column; align-items: stretch; padding: 12px 14px; gap: 10px; }
+
+        .box textarea {
+            flex: 1;
+            border: none;
+            outline: none;
+            resize: none;
+            font-family: inherit;
+            font-size: 14.5px;
+            line-height: 1.7;
+            color: var(--text);
+            background: transparent;
+            max-height: 200px;
+            min-height: 26px;
+            padding: 6px 0;
+        }
+
+        .send {
+            width: 34px;
+            height: 34px;
+            flex-shrink: 0;
+            border: none;
+            border-radius: 50%;
+            background: var(--accent);
+            color: #fff;
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .send:disabled { background: #d9d9d9; cursor: not-allowed; }
+
+        .composer-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+        .btn {
+            border: 1px solid #d9d9d9;
+            background: #fff;
+            color: var(--text);
+            border-radius: 8px;
+            padding: 7px 16px;
+            font-size: 13px;
+            font-family: inherit;
+            cursor: pointer;
+        }
+
+        .btn:hover:not(:disabled) { background: #f5f5f5; }
+        .btn:disabled { opacity: .45; cursor: not-allowed; }
+        .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+        .btn.primary:hover:not(:disabled) { background: #3b7ce0; }
+
+        .file-label { font-size: 13px; color: var(--accent); cursor: pointer; padding: 7px 2px; }
+        .file-label input { display: none; }
+
+        .status { margin-left: auto; font-size: 12px; color: var(--muted); }
+        .status.err { color: var(--danger); }
+
+        /* 轮到你回答时的提示条 */
+        .ask {
+            font-size: 13px;
+            color: var(--accent);
+            background: #eef4fe;
+            border-radius: 10px;
+            padding: 9px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .ask-head { color: #3a6ea5; }
+        .ask-idx { margin-left: 6px; font-size: 12px; color: var(--muted); }
+        .ask-q { color: var(--text); line-height: 1.7; word-break: break-word; }
+
+        .tip {
+            text-align: center;
+            font-size: 11.5px;
+            color: var(--muted);
+            margin: 8px 0 0;
+        }
+
+        @media (max-width: 820px) {
+            .sidebar { width: 200px; }
+            .thread-inner, .composer-inner { max-width: 100%; }
+        }
+    </style>
+</head>
+<body>
+<div id="app" class="layout">
+
+    <!-- ==================== 左侧栏 ==================== -->
+    <aside class="sidebar">
+        <div class="brand">
+            <span class="logo">AI</span>
+            <span>答辩陪练</span>
+        </div>
+
+        <!-- 两个智能体，用按钮分开：默认进模拟面试 -->
+        <nav class="modes">
+            <button :class="{ on: mode === 'interview' }" @click="switchMode('interview')">
+                <span class="ico">🎤</span> 模拟面试
+            </button>
+            <button :class="{ on: mode === 'review' }" @click="switchMode('review')">
+                <span class="ico">⚖️</span> 交叉质询评审团
+            </button>
+        </nav>
+
+        <button class="new-btn" :disabled="reviewRunning" @click="newSession">
+            ＋ {{ mode === 'interview' ? '新建对话' : '新建评审会' }}
+        </button>
+
+        <div class="history">
+            <div v-for="(h, i) in historyList" :key="i"
+                 class="hist" :class="{ on: i === activeIndex }"
+                 :title="h.title" @click="openHistory(i)">
+                {{ h.title }}
+            </div>
+            <div v-if="!historyList.length" class="hist empty">还没有记录</div>
+        </div>
+
+        <div class="user-tag">👤 {{ userId }}</div>
+    </aside>
+
+    <!-- ==================== 主区 ==================== -->
+    <main class="main">
+        <header class="topbar">
+            <h1>{{ mode === 'interview' ? '模拟面试' : '交叉质询评审团' }}</h1>
+            <span class="sub">{{ modeSub }}</span>
+        </header>
+
+        <!-- ---------- 模拟面试 ---------- -->
+        <div v-if="mode === 'interview'" class="thread" ref="thread">
+            <div class="thread-inner">
+                <div v-if="!chatMessages.length" class="hint">
+                    <h2>开始一场模拟面试</h2>
+                    <p>直接把问题发过来就行，出题、追问、点评都可以。</p>
+                </div>
+                <div v-for="(m, i) in chatMessages" :key="i" class="row" :class="m.role">
+                    <div v-if="m.role === 'user'" class="bubble-user">{{ m.content }}</div>
+                    <div v-else class="md" :class="{ streaming: m.streaming }"
+                         v-html="formatMessage(m.content)"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ---------- 交叉质询评审团 ---------- -->
+        <div v-else class="thread" ref="thread">
+            <div class="thread-inner">
+                <div v-if="!rv.utterances.length && !rv.elements" class="hint">
+                    <h2>开一场评审会</h2>
+                    <p>把方案粘贴到下面，或点「上传文件」<br>
+                       四位评审会依次质询，冲突时还会互相接话</p>
+                </div>
+
+                <!-- 方案要素表 -->
+                <div v-if="rv.elements" class="card">
+                    <div class="title">方案要素表</div>
+                    <div class="row2">
+                        <span class="k">项目目标</span>
+                        <span class="v">{{ rv.elements.goal }}</span>
+                    </div>
+                    <div class="row2">
+                        <span class="k">技术方案</span>
+                        <span class="v">{{ listText(rv.elements.tech) }}</span>
+                    </div>
+                    <div class="row2">
+                        <span class="k">预算资源</span>
+                        <span class="v" :class="{ missing: isAbsent(rv.elements.budget) }">
+                            {{ rv.elements.budget }}
+                        </span>
+                    </div>
+                    <div class="row2">
+                        <span class="k">进度安排</span>
+                        <span class="v" :class="{ missing: isAbsent(rv.elements.schedule) }">
+                            {{ rv.elements.schedule }}
+                        </span>
+                    </div>
+                    <div class="row2">
+                        <span class="k">风险应对</span>
+                        <span class="v" :class="{ missing: !rv.elements.risks || !rv.elements.risks.length }">
+                            {{ listText(rv.elements.risks) }}
+                        </span>
+                    </div>
+                    <div class="row2">
+                        <span class="k">数据合规</span>
+                        <span class="v" :class="{ missing: isAbsent(rv.elements.compliance) }">
+                            {{ rv.elements.compliance }}
+                        </span>
+                    </div>
+                    <div class="row2">
+                        <span class="k">目标用户</span>
+                        <span class="v">{{ rv.elements.users }}</span>
+                    </div>
+                    <div class="row2" v-if="rv.elements.missing && rv.elements.missing.length">
+                        <span class="k">方案缺失项</span>
+                        <span class="v">
+                            <span class="tags">
+                                <span v-for="m in rv.elements.missing" :key="m">{{ m }}</span>
+                            </span>
+                        </span>
+                    </div>
+                </div>
+
+                <!-- 发言 -->
+                <div v-for="(u, i) in rv.utterances" :key="i"
+                     class="msg"
+                     :class="{ cross: u.questionType === 'cross', streaming: u.streaming,
+                               student: u.kind === 'student',
+                               pending: u.text && u.text === rv.awaitingQuestion }">
+                    <div v-if="u.kind === 'note'" class="note">{{ u.text }}</div>
+                    <template v-else>
+                        <div class="avatar" :style="{ background: u.color }">{{ u.short }}</div>
+                        <div class="body">
+                            <div class="name">
+                                {{ u.name }}
+                                <span v-if="u.questionType === 'cross'" class="reply">
+                                    ⟶ 接 {{ u.targetName }} 的话
+                                </span>
+                                <span v-else-if="u.questionType === 'followup'" class="follow">↳ 追问</span>
+                            </div>
+                            <div class="bubble">{{ u.text }}</div>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- 汇总 -->
+                <div v-if="rv.summary" class="summary">
+                    评审会结束 · {{ rv.summary.mainCount }} 个主问题 ·
+                    {{ rv.summary.crossCount }} 次交叉质询 ·
+                    未答好 {{ rv.summary.unresolvedCount }} 个
+                </div>
+
+                <!-- 未答好的问题清单：本系统最终要交付的东西 -->
+                <div v-if="rv.summary" class="card unresolved">
+                    <div class="title">未答好的问题清单（按严重度排序）</div>
+                    <div v-if="!rv.unresolved.length" class="u-none">
+                        这一场全部答清楚了，没有未答好的问题。
+                    </div>
+                    <div class="u" v-for="(u, i) in rv.unresolved" :key="i">
+                        <span class="sev">{{ u.severity }}</span>
+                        <div class="u-body">
+                            <div class="u-q">{{ nameOf(u.speaker_role) }}：{{ u.question }}</div>
+                            <div v-if="u.student_answer" class="u-a">你的回答：{{ u.student_answer }}</div>
+                            <div v-if="u.followup_question" class="u-a">
+                                ↳ 追问：{{ u.followup_question }}
+                                <template v-if="u.followup_answer">（你答：{{ u.followup_answer }}）</template>
+                            </div>
+                            <div v-if="u.comment" class="u-a">{{ u.comment }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 会议纪要 -->
+                <div v-if="rv.minutesLog.length" class="card minutes">
+                    <div class="title">会议纪要 · 质询记录</div>
+                    <div class="line" v-for="(m, i) in rv.minutesLog" :key="i">
+                        <span class="idx">{{ i + 1 }}</span>
+                        <div class="line-body">
+                            <div class="line-head">
+                                {{ nameOf(m.speaker_role) }}
+                                <span v-if="m.question_type === 'cross'" class="reply">
+                                    ⟶ 接 {{ nameOf(m.target_speaker) }} 的话
+                                </span>
+                                <span v-else-if="m.question_type === 'followup'" class="follow">↳ 追问</span>
+                                <span v-if="m.verdict" class="verdict" :class="m.verdict">
+                                    {{ verdictText(m.verdict) }}
+                                </span>
+                            </div>
+                            <div class="line-q">{{ m.question }}</div>
+                            <div v-if="m.student_answer" class="line-a">学生：{{ m.student_answer }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== 底部输入区 ==================== -->
+        <div class="composer">
+            <div class="composer-inner">
+
+                <!-- 模拟面试：一个输入框就够 -->
+                <template v-if="mode === 'interview'">
+                    <div class="box">
+                        <textarea v-model="chatInput" rows="1" :disabled="chatStreaming"
+                                  placeholder="给面试官发消息…"
+                                  @keydown.enter.exact.prevent="sendChat"></textarea>
+                        <button class="send" :disabled="chatStreaming || !chatInput.trim()"
+                                @click="sendChat">↑</button>
+                    </div>
+                    <p class="tip">Enter 发送 · Shift + Enter 换行</p>
+                </template>
+
+                <!-- 评审团：三个阶段，输入区跟着换 -->
+                <template v-else>
+                    <!-- 1) 回看往期记录：只读 -->
+                    <template v-if="rv.readOnly">
+                        <div class="composer-row">
+                            <span class="status">这是往期评审会的记录，只读</span>
+                            <button class="btn primary" @click="newSession">新建评审会</button>
+                        </div>
+                    </template>
+
+                    <!-- 2) 还没提交方案 -->
+                    <template v-else-if="!rv.started">
+                        <div class="box col">
+                            <textarea v-model="rv.planText" rows="4"
+                                      placeholder="把开题 / 大创 / 竞赛方案粘贴到这里…"></textarea>
+                            <div class="composer-row">
+                                <label class="file-label">
+                                    上传文件
+                                    <input type="file" accept=".txt,.md,.docx,.pdf" @change="onFile">
+                                </label>
+                                <button class="btn" :disabled="reviewRunning || !rv.planText.trim()"
+                                        @click="submitPlan">提交方案</button>
+                                <button class="btn primary" :disabled="reviewRunning || !rv.id"
+                                        @click="startMeeting">开始评审会</button>
+                                <span class="status" :class="{ err: !!reviewError }">{{ rvStatusText }}</span>
+                            </div>
+                        </div>
+                    </template>
+
+                    <!-- 3) 会议进行中：答题框 -->
+                    <template v-else>
+                        <div class="box col">
+                            <div v-if="rv.awaiting" class="ask">
+                                <span class="ask-head">
+                                    请回答 <b>{{ rv.awaitingName }}</b> 的质询
+                                    <span v-if="rv.awaitingTotal > 1" class="ask-idx">
+                                        本议题第 {{ rv.awaitingIndex }}/{{ rv.awaitingTotal }} 问
+                                    </span>
+                                </span>
+                                <span class="ask-q">{{ rv.awaitingQuestion }}</span>
+                            </div>
+                            <textarea v-model="rv.answerText" rows="3"
+                                      :disabled="reviewRunning || !rv.awaiting"
+                                      placeholder="回答评审的问题…"></textarea>
+                            <div class="composer-row">
+                                <button class="btn primary" :disabled="reviewRunning || !rv.awaiting"
+                                        @click="submitAnswer(false)">提交回答</button>
+                                <button class="btn" :disabled="reviewRunning || !rv.awaiting"
+                                        @click="submitAnswer(true)">跳过</button>
+                                <button v-if="rv.summary" class="btn" @click="newSession">新建评审会</button>
+                                <span class="status" :class="{ err: !!reviewError }">{{ rvStatusText }}</span>
+                            </div>
+                        </div>
+                    </template>
+                </template>
+
+            </div>
+        </div>
+    </main>
+</div>
+
+<script>
+    marked.setOptions({ breaks: true, gfm: true, headerIds: false, mangle: false });
+
+    // 两个智能体的历史记录都存在本地：后端本来就按 session_id 记着上下文，
+    // 这里只需要记住"有哪些会话、聊过什么"，刷新页面就能接回去
+    var STORE = 'exam_agent.ui.v1';
+    var KEEP = 20;   // 最多留几场
+
+    function emptyReview() {
+        return {
+            id: '', title: '新评审会', planText: '', elements: null,
+            started: false, readOnly: false, loading: false,
+            utterances: [], summary: null, minutesLog: [], unresolved: [],
+            awaiting: false, awaitingName: '', awaitingQuestion: '',
+            awaitingIndex: 0, awaitingTotal: 0, answerText: ''
+        };
+    }
+
+    function emptyChat() {
+        return { id: '', title: '新对话', messages: [] };
+    }
+
+    new Vue({
+        el: '#app',
+        data: {
+            userId: '',
+            mode: 'interview',          // interview 主界面 / review 评审团
+
+            // ---- 模拟面试 ----
+            chatList: [],
+            chatActive: 0,
+            chatInput: '',
+            chatStreaming: false,
+            chatSource: null,
+
+            // ---- 评审团 ----
+            reviewList: [],
+            reviewActive: 0,
+            rv: emptyReview(),
+            reviewRunning: false,
+            reviewError: '',
+            reviewStatus: '',
+            reviewCurrent: null,
+            reviewSource: null,
+            scrollTimer: null,
+
+            reviewers: [
+                { role: 'tech', name: '技术评审', short: '技术', color: '#4a8cf7' },
+                { role: 'cost', name: '成本与进度评审', short: '成本', color: '#e08b39' },
+                { role: 'compliance', name: '合规与伦理评审', short: '合规', color: '#9b6bd6' },
+                { role: 'user', name: '用户与价值评审', short: '用户', color: '#3aab7a' }
+            ]
+        },
+        computed: {
+            // 侧栏里列的东西跟着当前智能体换
+            historyList: function () {
+                return this.mode === 'interview' ? this.chatList : this.reviewList;
+            },
+            activeIndex: function () {
+                return this.mode === 'interview' ? this.chatActive : this.reviewActive;
+            },
+            chatMessages: function () {
+                var c = this.chatList[this.chatActive];
+                return c ? c.messages : [];
+            },
+            modeSub: function () {
+                return this.mode === 'interview'
+                    ? '多轮问答，支持追问与点评'
+                    : '提交方案 → 四位评审交叉质询 → 未答好的问题清单';
+            },
+            rvStatusText: function () {
+                if (this.reviewError) return this.reviewError;
+                if (this.reviewStatus) return this.reviewStatus;
+                if (this.reviewRunning) return '评审会进行中…';
+                if (this.rv.awaiting) return '等你的回答';
+                if (this.rv.summary) return '评审会已结束';
+                if (this.rv.id) return '方案已提交，可以开始评审会';
+                return '等待提交方案';
+            }
+        },
+        mounted: function () {
+            this.restore();
+            // 支持 /review 直接落到评审团那一侧（路由那边带 tab=review 过来）
+            var tab = (window.location.search.match(/[?&]tab=([^&]+)/) || [])[1];
+            if (tab === 'review' || tab === 'interview') this.mode = tab;
+        },
+        beforeDestroy: function () {
+            if (this.chatSource) this.chatSource.close();
+            if (this.reviewSource) this.reviewSource.close();
+        },
+        methods: {
+            // ==================== 本地存档 ====================
+            save: function () {
+                try {
+                    localStorage.setItem(STORE, JSON.stringify({
+                        user_id: this.userId,
+                        // 只留最近几场：方案正文可能上万字，攒太多会把 localStorage 撑爆
+                        chat_list: this.chatList.slice(-KEEP),
+                        chat_active: this.chatActive,
+                        review_list: this.reviewList.slice(-KEEP),
+                        review_active: this.reviewActive
+                    }));
+                } catch (e) { /* 存不下就算了，不影响当前这一场 */ }
+            },
+            restore: function () {
+                var raw = null;
+                try { raw = JSON.parse(localStorage.getItem(STORE) || 'null'); } catch (e) { raw = null; }
+                this.userId = (raw && raw.user_id) || ('user_' + Math.random().toString(36).substring(2, 8));
+                this.chatList = (raw && raw.chat_list) || [];
+                this.reviewList = (raw && raw.review_list) || [];
+                this.chatActive = Math.min((raw && raw.chat_active) || 0, Math.max(this.chatList.length - 1, 0));
+                this.reviewActive = Math.min((raw && raw.review_active) || 0,
+                                             Math.max(this.reviewList.length - 1, 0));
+                if (!this.chatList.length) this.chatList.push(emptyChat());
+                if (!this.reviewList.length) this.reviewList.push(emptyReview());
+                // 上一次可能是关在会议中途的：这两项是"当场状态"，重开页面不认
+                this.reviewList.forEach(function (r) {
+                    r.loading = false;
+                    r.utterances.forEach(function (u) { u.streaming = false; });
+                });
+                this.rv = this.reviewList[this.reviewActive];
+                // 存档里可能带着"还在等回答"的会议，检查点还在，接着答就行
+                this.save();
+            },
+
+            // ==================== 切换 / 新建 ====================
+            switchMode: function (m) {
+                if (this.mode === m) return;
+                this.mode = m;
+                this.reviewError = '';
+                this.reviewStatus = '';
+                this.jumpToBottom();
+            },
+            newSession: function () {
+                if (this.mode === 'interview') {
+                    this.chatList.push(emptyChat());
+                    this.chatActive = this.chatList.length - 1;
+                } else {
+                    this.reviewList.push(emptyReview());
+                    this.reviewActive = this.reviewList.length - 1;
+                    this.rv = this.reviewList[this.reviewActive];
+                    this.reviewError = '';
+                    this.reviewStatus = '';
+                }
+                this.save();
+                this.jumpToBottom();
+            },
+            openHistory: function (i) {
+                if (this.mode === 'interview') {
+                    this.chatActive = i;
+                } else {
+                    this.reviewActive = i;
+                    this.rv = this.reviewList[i];
+                    this.reviewError = '';
+                    this.reviewStatus = '';
+                    // 本地没存过过程，但库里有记录 -> 从后端读回来当只读回看
+                    if (!this.rv.utterances.length && this.rv.id) this.loadRecord(this.rv);
+                }
+                this.save();
+                this.jumpToBottom();
+            },
+
+            jumpToBottom: function () {
+                var self = this;
+                this.$nextTick(function () {
+                    var box = self.$refs.thread;
+                    if (box) box.scrollTop = box.scrollHeight;
+                });
+            },
+            jumpToBottomSoon: function () {
+                var self = this;
+                if (this.scrollTimer) return;
+                this.scrollTimer = setTimeout(function () {
+                    self.scrollTimer = null;
+                    self.jumpToBottom();
+                }, 300);
+            },
+
+            // ==================== 模拟面试 ====================
+            formatMessage: function (content) {
+                if (!content) return '';
+                try {
+                    return marked.parse(content);
+                } catch (e) {
+                    return content.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                }
+            },
+
+            // 会话ID由 /create_session 下发，带着它后端才接得上四层记忆。
+            // 本地已经存过就带上，后端校验通过直接复用；过期或换了用户会另发一个
+            ensureSession: function () {
+                var self = this;
+                var c = this.chatList[this.chatActive];
+                if (!c) return Promise.resolve('');
+                if (c.id) return Promise.resolve(c.id);
+                return fetch('/create_session', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: this.userId, session_id: '' })
+                })
+                    .then(function (r) { return r.json(); })
+                    .then(function (res) {
+                        c.id = res.data || '';
+                        self.save();
+                        return c.id;
+                    })
+                    .catch(function (e) {
+                        console.error('创建会话失败，后端会自动新建', e);
+                        return '';
+                    });
+            },
+
+            sendChat: function () {
+                var self = this;
+                var q = this.chatInput.trim();
+                if (!q || this.chatStreaming) return;
+                var c = this.chatList[this.chatActive];
+                if (!c) return;
+
+                c.messages.push({ role: 'user', content: q });
+                // 侧栏标题取第一句话
+                if (c.title === '新对话' || !c.title) {
+                    c.title = q.slice(0, 16) + (q.length > 16 ? '…' : '');
+                }
+                this.chatInput = '';
+                this.chatStreaming = true;
+                this.jumpToBottom();
+
+                var bot = { role: 'bot', content: '', streaming: true };
+                c.messages.push(bot);
+
+                this.ensureSession().then(function (sid) {
+                    if (self.chatSource) { self.chatSource.close(); self.chatSource = null; }
+                    var params = 'question=' + encodeURIComponent(q)
+                        + '&user_id=' + encodeURIComponent(self.userId)
+                        + '&session_id=' + encodeURIComponent(sid || '');
+                    var es = new EventSource('/chat?' + params);
+                    self.chatSource = es;
+
+                    es.onmessage = function (e) {
+                        var data = JSON.parse(e.data);
+                        if (data.done) {
+                            es.close();
+                            self.chatSource = null;
+                            bot.streaming = false;
+                            self.chatStreaming = false;
+                            self.save();
+                        } else {
+                            bot.content += data.data;
+                            self.jumpToBottomSoon();
+                        }
+                    };
+                    es.onerror = function () {
+                        es.close();
+                        self.chatSource = null;
+                        bot.streaming = false;
+                        self.chatStreaming = false;
+                        if (!bot.content) bot.content = '⚠️ 连接中断，请重试。';
+                    };
+                });
+            },
+
+            // ==================== 评审团 ====================
+            listText: function (arr) {
+                if (!arr || !arr.length) return '未提及';
+                return arr.join('；');
+            },
+            isAbsent: function (v) {
+                return !v || v.indexOf('未提及') >= 0;
+            },
+            nameOf: function (role) {
+                var hit = this.reviewers.filter(function (r) { return r.role === role; })[0];
+                return hit ? hit.name : (role || '评审');
+            },
+            verdictText: function (v) {
+                if (v === 'resolved') return '答清楚了';
+                if (v === 'partial') return '答得不全';
+                return '没答到点上';
+            },
+            summaryOf: function (log) {
+                var mains = (log || []).filter(function (x) { return x.question_type === 'main'; });
+                var crosses = (log || []).filter(function (x) { return x.question_type === 'cross'; });
+                return { mainCount: mains.length, crossCount: crosses.length };
+            },
+
+            // 往期记录读回来当只读回看：散会时已经落库，这里直接取
+            loadRecord: function (s) {
+                var self = this;
+                s.loading = true;
+                fetch('/review/session/' + encodeURIComponent(s.id))
+                    .then(function (r) { return r.ok ? r.json() : null; })
+                    .then(function (d) {
+                        s.loading = false;
+                        if (!d) return;
+                        s.planText = s.planText || d.plan_text || '';
+                        s.elements = d.plan_elements || null;
+                        s.minutesLog = d.question_log || [];
+                        s.unresolved = d.unresolved || [];
+                        var sum = self.summaryOf(s.minutesLog);
+                        sum.unresolvedCount = s.unresolved.length;
+                        s.summary = s.minutesLog.length ? sum : null;
+                        s.started = true;
+                        s.readOnly = true;
+                        self.save();
+                    })
+                    .catch(function () { s.loading = false; });
+            },
+
+            onFile: function (e) {
+                var file = e.target.files && e.target.files[0];
+                if (!file) return;
+                var self = this;
+                var fd = new FormData();
+                fd.append('file', file);
+                this.reviewError = '';
+                this.reviewStatus = '正在解析 ' + file.name + '…';
+                fetch('/review/upload', { method: 'POST', body: fd })
+                    .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+                    .then(function (res) {
+                        if (!res.ok) throw new Error(res.d.detail || '上传失败');
+                        self.rv.planText = res.d.plan_text;
+                        self.reviewStatus = '已解析 ' + res.d.chars + ' 字';
+                        self.save();
+                    })
+                    .catch(function (err) {
+                        self.reviewError = String(err.message || err);
+                        self.reviewStatus = '';
+                    })
+                    .finally(function () { e.target.value = ''; });
+            },
+
+            submitPlan: function () {
+                var self = this;
+                this.reviewError = '';
+                this.reviewStatus = '正在抽取方案要素…';
+                fetch('/review/submit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ plan_text: this.rv.planText })
+                })
+                    .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+                    .then(function (res) {
+                        if (!res.ok) throw new Error(res.d.detail || '提交失败');
+                        self.rv.id = res.d.session_id;
+                        self.rv.title = res.d.plan_title || '评审会';
+                        self.rv.elements = res.d.plan_elements;
+                        self.rv.started = false;
+                        self.rv.readOnly = false;
+                        self.reviewStatus = '要素表已生成（缺 ' +
+                            ((res.d.plan_elements.missing || []).length) + ' 项）';
+                        self.save();
+                        self.jumpToBottom();
+                    })
+                    .catch(function (err) {
+                        self.reviewError = String(err.message || err);
+                        self.reviewStatus = '';
+                    });
+            },
+
+            // 用 fetch + ReadableStream 读 SSE：EventSource 只能发 GET，
+            // 方案正文和回答都塞不进 URL。开场和答题读的是同一种流，抽出来共用
+            pump: function (resp) {
+                var self = this;
+                if (!resp.ok) {
+                    return resp.json().then(function (d) {
+                        throw new Error(d.detail || '评审会请求失败');
+                    });
+                }
+                var reader = resp.body.getReader();
+                var decoder = new TextDecoder('utf-8');
+                var buffer = '';
+
+                function read() {
+                    return reader.read().then(function (res) {
+                        if (res.done) return;
+                        buffer += decoder.decode(res.value, { stream: true });
+                        var idx;
+                        while ((idx = buffer.indexOf('\n\n')) >= 0) {
+                            var raw = buffer.slice(0, idx);
+                            buffer = buffer.slice(idx + 2);
+                            raw.split('\n').forEach(function (line) {
+                                if (line.indexOf('data: ') === 0) {
+                                    try {
+                                        self.handleReviewEvent(JSON.parse(line.slice(6)));
+                                    } catch (e) { /* 半包就跳过 */ }
+                                }
+                            });
+                        }
+                        return read();
+                    });
+                }
+                return read();
+            },
+
+            startMeeting: function () {
+                var self = this;
+                this.reviewError = '';
+                this.reviewStatus = '';
+                this.reviewRunning = true;
+                this.rv.utterances = [];
+                this.rv.summary = null;
+                this.rv.minutesLog = [];
+                this.rv.unresolved = [];
+                this.rv.started = true;
+                this.rv.readOnly = false;
+                this.reviewCurrent = null;
+                this.save();
+
+                fetch('/review/meeting/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_id: this.rv.id, max_round: 1 })
+                })
+                    .then(function (resp) { return self.pump(resp); })
+                    .catch(function (err) { self.reviewError = String(err.message || err); })
+                    .finally(function () {
+                        self.reviewRunning = false;
+                        if (self.reviewCurrent) {
+                            self.reviewCurrent.streaming = false;
+                            self.reviewCurrent = null;
+                        }
+                        self.save();
+                    });
+            },
+
+            submitAnswer: function (skip) {
+                var self = this;
+                var answer = skip ? '' : this.rv.answerText.trim();
+                if (!skip && !answer) return;
+
+                this.reviewError = '';
+                this.reviewStatus = '';
+                if (!skip) {
+                    this.rv.utterances.push({
+                        kind: 'student', name: '学生（我）', short: '学生',
+                        color: '#3c4250', text: answer
+                    });
+                }
+                this.rv.answerText = '';
+                this.rv.awaiting = false;
+                this.rv.awaitingQuestion = '';
+                this.reviewRunning = true;
+                this.save();
+                this.jumpToBottom();
+
+                fetch('/review/meeting/answer', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_id: this.rv.id, answer: answer, skip: !!skip })
+                })
+                    .then(function (resp) { return self.pump(resp); })
+                    .catch(function (err) { self.reviewError = String(err.message || err); })
+                    .finally(function () {
+                        self.reviewRunning = false;
+                        if (self.reviewCurrent) {
+                            self.reviewCurrent.streaming = false;
+                            self.reviewCurrent = null;
+                        }
+                        self.save();
+                    });
+            },
+
+            handleReviewEvent: function (e) {
+                if (e.event === 'elements') {
+                    this.reviewStatus = '要素表已就绪';
+                } else if (e.event === 'speaker_start') {
+                    var info = this.reviewers.filter(function (r) {
+                        return r.role === e.role;
+                    })[0] || { short: '评审', color: '#8a9099' };
+                    var item = {
+                        kind: 'reviewer', role: e.role, name: e.name,
+                        short: info.short, color: info.color,
+                        questionType: e.question_type,
+                        target: e.target || '', targetName: e.target_name || '',
+                        text: '', streaming: true
+                    };
+                    this.rv.utterances.push(item);
+                    this.reviewCurrent = item;
+                    this.jumpToBottom();
+                } else if (e.event === 'token') {
+                    if (this.reviewCurrent) this.reviewCurrent.text += e.text;
+                    this.jumpToBottomSoon();
+                } else if (e.event === 'speaker_end') {
+                    if (this.reviewCurrent) {
+                        this.reviewCurrent.text = e.question;
+                        this.reviewCurrent.streaming = false;
+                        this.reviewCurrent = null;
+                    }
+                    this.jumpToBottom();
+                } else if (e.event === 'verdict') {
+                    this.rv.utterances.push({
+                        kind: 'note',
+                        text: (e.name || '评审') + ' 判定：' + this.verdictText(e.verdict) +
+                            '（严重度 ' + e.severity + '）' +
+                            (e.comment ? ' · ' + e.comment : '')
+                    });
+                    this.jumpToBottom();
+                } else if (e.event === 'await_answer') {
+                    // 图停下来了，轮到学生答这一条
+                    this.rv.awaiting = true;
+                    this.rv.awaitingName = e.name || '评审';
+                    this.rv.awaitingQuestion = e.question || '';
+                    this.rv.awaitingIndex = e.question_index || 1;
+                    this.rv.awaitingTotal = e.issue_total || 1;
+                    this.reviewStatus = '';
+                    this.save();
+                    this.jumpToBottom();
+                } else if (e.event === 'meeting_end') {
+                    var log = e.question_log || [];
+                    var sum = this.summaryOf(log);
+                    sum.unresolvedCount = (e.unresolved || []).length;
+                    this.rv.summary = sum;
+                    // 纪要和清单直接用散会事件里带的全量数据渲染，不用再请求一次
+                    this.rv.minutesLog = log;
+                    this.rv.unresolved = e.unresolved || [];
+                    this.rv.awaiting = false;
+                    this.reviewStatus = '评审会结束';
+                    this.save();
+                    this.jumpToBottom();
+                } else if (e.event === 'error') {
+                    this.reviewError = e.message || '评审会出错';
+                }
+            }
+        }
+    });
+</script>
+</body>
+</html>
