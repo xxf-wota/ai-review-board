@@ -136,6 +136,7 @@ python -m app.main
 >
 > 评审会的**图结构、每个节点读什么状态写什么状态、分支条件、改哪里** →
 > [`docs/评审团流程图与状态说明.md`](docs/评审团流程图与状态说明.md)（Mermaid，可直接编辑）
+> ／ [`docs/评审团流程图.drawio`](docs/评审团流程图.drawio)（同内容的 draw.io 版，4 页，能拖拽改）
 
 > 注意：不要用 `python app/main.py`。那样 `sys.path` 会变成 `app/` 目录，
 > `import app.xxx` 会失败。`main.py` 里的静态目录是相对项目根的 `app/html`，
