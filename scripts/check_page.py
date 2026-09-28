@@ -144,6 +144,19 @@ def main():
         log(f"    模板里用了 {len(used)} 个根标识符：{sorted(used)}")
         log(f"    未定义的：{unknown if unknown else '无'}")
 
+        # 学生气泡必须真的靠右。这三条是一条完整的不变式，缺一条就会歪：
+        # 只写 row-reverse 只挪头像，.body 还占满整行、.bubble 是 inline-block 会贴左边
+        # （踩过这个 bug：气泡留在左边，头像一个在右边，看着很怪）
+        css = html.split("</style>")[0]
+        ok_align = (
+            bool(re.search(r"\.msg\.student\s*\{[^}]*row-reverse", css))
+            and bool(re.search(r"\.msg\.student\s+\.body\s*\{[^}]*text-align:\s*right", css))
+            # text-align 会继承，气泡里的文字必须显式改回左对齐
+            and bool(re.search(r"\.msg\.student\s+\.bubble\s*\{[^}]*text-align:\s*left", css))
+        )
+        log(f"\n  学生气泡靠右（row-reverse + body 右对齐 + 气泡内文字左对齐）："
+            f"{'通过' if ok_align else '不通过'}")
+
         ok_js, js_err = js_syntax(html, "review")
         log(f"\n  JS 语法检查（node --check）：{'通过' if ok_js else '不通过'}")
         if js_err:
@@ -211,6 +224,7 @@ def main():
         ("/review 跳转          ", ok_route),
         ("页面可取到且标记齐全  ", ok_file),
         ("模板变量全部有定义    ", not unknown),
+        ("学生气泡靠右          ", ok_align),
         ("前后端接口对账        ", not bad),
         ("JS 语法（review）     ", ok_js),
         ("/ 跳转 chat.html      ", ok_chat_route),

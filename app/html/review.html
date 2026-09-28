@@ -160,17 +160,24 @@
         }
 
         /* ---------- 学生自己的回答，按普通聊天那样靠右 ---------- */
+        /*
+         * row-reverse 只把头像挪到了右边，.body 依旧占满整行；
+         * .bubble 是 inline-block，默认贴着 .body 的左边，所以光靠 row-reverse 气泡还在左边。
+         * 必须再让 .body 右对齐；而 text-align 会继承下去，气泡里的文字要显式改回左对齐，
+         * 否则多行回答会整段右对齐，很难看。
+         */
         .msg.student {
             flex-direction: row-reverse;
         }
 
-        .msg.student .name {
+        .msg.student .body {
             text-align: right;
         }
 
         .msg.student .bubble {
             background: #4a8cf7;
             color: #fff;
+            text-align: left;
         }
 
         /* 判定结论：居中一行小字，不占气泡 */
