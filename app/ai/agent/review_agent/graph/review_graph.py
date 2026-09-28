@@ -1,5 +1,4 @@
 from langchain_core.messages import HumanMessage
-from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from app.ai.agent.review_agent.node.cross_node import cross_node
@@ -14,12 +13,16 @@ AI 交叉质询评审团
 与模拟面试图同一个骨架：START 进 manager，每个节点干完都回 manager，由它决定下一步
 
 和 M3 的区别：会议不再一口气跑完，而是"问一句、停一下、等学生答"。
-manger 走到 await_answer 就 goto=END，这次请求结束；学生答完再发一次请求，
-带上同一个 thread_id，图从检查点里把状态捞回来接着跑
-"""
+manager 走到 await_answer 就 goto=END，这次请求结束；学生答完再发一次请求，
+带上同一个 thread_id，图从检查点里把状态捞回来接着跑。
 
-# 验收脚本用 run_to_end 自动答题时的兜底回答
-AUTO_ANSWER = "我们按 5000 名用户做了测算，主要是服务器和接口调用两部分，具体数字还在核。"
+检查点由外面注入（`main.py` 里是 PostgreSQL 的 AsyncPostgresSaver），
+这个类自己不关心存哪儿 —— 所以进程重启后会议照样接得上。
+
+要看图别用 LangGraph 的 draw：manager 走的是 Command(goto=...) 动态跳转，
+自动画出来的图只有「节点全回中枢」，分支一条都看不到。
+准确的结构图在 docs/评审团流程图.drawio 和 docs/评审团流程图与状态说明.md。
+"""
 
 
 def build_init_state(plan_text: str, max_round: int = 1, max_cross_total=None,
@@ -149,33 +152,3 @@ class ReviewGraph:
             {"student_answer": answer, "meeting_phase": "judge"}, session_id
         ):
             yield event
-
-    # 一口气把整场会议跑完，每次提问都用同一句兜底回答顶上。给验收脚本用，前端不走这里。
-    # 走的是真实的 start/resume 路径，所以验的是真流程，不是另写一套
-    async def run_to_end(self, plan_text, session_id, answer=AUTO_ANSWER, max_round=1,
-                         max_cross_total=None, plan_elements=None):
-        events = []
-        async for e in self.start(plan_text, session_id, max_round, max_cross_total, plan_elements):
-            events.append(e)
-
-        # 一步步答下去。加个上限，图哪天写错了也不会在这儿转死
-        guard = 0
-        while events and events[-1].get("event") == "await_answer" and guard < 50:
-            guard += 1
-            async for e in self.resume(session_id, answer):
-                events.append(e)
-
-        values = (await self.agent.aget_state(self._config(session_id))).values or {}
-        return events, values
-
-    # 画图，排查调度问题时很有用
-    def draw(self):
-        data = self.agent.get_graph().draw_mermaid_png()
-        with open("评审会图.png", "wb") as f:
-            f.write(data)
-
-
-if __name__ == '__main__':
-    checkpoint = InMemorySaver()
-    graph = ReviewGraph(checkpoint)
-    graph.draw()
