@@ -228,8 +228,8 @@ async def cross_node(state: ReviewState):
     return {
         "messages": [AIMessage(content=f"\n【{who}】⟶ 接{target_name}的话：{text}\n")],
         # 注意：不改 pending_question / pending_type / pending_from。
-        # 那三个描述的是"学生接下来要回答哪个问题"，而接话是评审之间的对抗，只记录、不要求学生回答
-        # （M4 定的规则）。改掉的话，学生会去答接话，主问题反而没人判、进不了未答好清单
+        # "学生接下来答哪一条"是 manager 从 question_log 里推出来的（本议题第一条没判过的），
+        # 接话节点在这儿写这三个字段只会被覆盖，还容易让人误以为接话抢了主问题的位置
         "meeting_phase": "cross",
         # 置位后 manager 才会推进到下一位，避免在 cross 上打转
         "cross_checked": True,

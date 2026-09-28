@@ -22,7 +22,9 @@ class ReviewState(TypedDict):
     # 方案要素表，抽取一次后全场复用
     plan_elements: dict[str, Any]
     # ---------- 会议控制 ----------
-    # extract / main / judge / cross / minutes / diagnose / done
+    # 会议推进的唯一开关，取值与去向见 manager_node 的决策表：
+    # extract 抽取 / main 提主问题 / cross 接话 / await_answer 停下等学生
+    # judge 判定 / followup 追问 / advance 议题收尾 / done 散会
     meeting_phase: str
     # 第几轮
     round: int
