@@ -4,7 +4,7 @@ from langgraph.graph import END, START, StateGraph
 
 from app.ai.agent.review_agent.node.cross_node import cross_node
 from app.ai.agent.review_agent.node.extract_node import extract_node
-from app.ai.agent.review_agent.node.judge_node import judge_node
+from app.ai.agent.review_agent.node.judge_node import current_issue, judge_node
 from app.ai.agent.review_agent.node.manager_node import DEFAULT_ORDER, manager_node
 from app.ai.agent.review_agent.node.speaker_node import REVIEWER_NAMES, speaker_node
 from app.ai.agent.review_agent.state.review_state import ReviewState
@@ -111,6 +111,10 @@ class ReviewGraph:
         phase = values.get("meeting_phase") or ""
         if phase == "await_answer":
             role = values.get("pending_from") or values.get("current_speaker") or ""
+            # 本议题一共几条问题、现在要答的是第几条。前端拿它显示"第 2/3 问"，
+            # 学生才知道后面还有没有（一个议题里可能好几位评审都问了话）
+            issue = current_issue(values.get("question_log") or [])
+            unjudged = [x for x in issue if not x.get("verdict")]
             return {
                 "event": "await_answer",
                 "session_id": session_id,
@@ -118,6 +122,8 @@ class ReviewGraph:
                 "name": REVIEWER_NAMES.get(role, role),
                 "question": values.get("pending_question") or "",
                 "question_type": values.get("pending_type") or "main",
+                "question_index": len(issue) - len(unjudged) + 1,
+                "issue_total": len(issue),
             }
         return {
             "event": "meeting_end",

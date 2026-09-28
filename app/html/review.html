@@ -107,6 +107,18 @@
             border: 1px solid #f3ddc6;
         }
 
+        /* 当前在等学生回答的那一条：描蓝边 + 挂个标。
+           一个议题里可能好几位评审问了话，必须一眼看出现在该答哪条 */
+        .msg.pending .bubble {
+            border: 1px solid #4a8cf7;
+            box-shadow: 0 0 0 3px rgba(74, 140, 247, .12);
+        }
+
+        .msg.pending .name::after {
+            content: " ⟵ 请回答这一条";
+            color: #4a8cf7;
+        }
+
         /* 流式输出时的光标 */
         .msg.streaming .bubble::after {
             content: "▍";
@@ -210,6 +222,24 @@
             border-radius: 6px;
             padding: 8px 12px;
             margin-bottom: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .ask-head { color: #3a6ea5; }
+
+        .ask-idx {
+            margin-left: 6px;
+            font-size: 12px;
+            color: #8a9099;
+        }
+
+        /* 把要答的问题原文摊出来，省得学生对着屏幕上好几条问题猜该答哪个 */
+        .ask-q {
+            color: #1f2329;
+            line-height: 1.7;
+            word-break: break-word;
         }
 
         /* ---------- 会议纪要 / 未答好清单 ---------- */
@@ -417,7 +447,8 @@
         <!-- 发言列表 -->
         <div v-for="(u, i) in utterances" :key="i"
              class="msg"
-             :class="{ cross: u.questionType === 'cross', streaming: u.streaming, student: u.kind === 'student' }">
+             :class="{ cross: u.questionType === 'cross', streaming: u.streaming,
+                       student: u.kind === 'student', pending: u.text && u.text === awaitingQuestion }">
             <!-- 判定结论用小字居中显示，不套气泡 -->
             <div v-if="u.kind === 'note'" class="note">{{ u.text }}</div>
             <template v-else>
@@ -453,6 +484,11 @@
                 <div class="u-body">
                     <div class="u-q">{{ nameOf(u.speaker_role) }}：{{ u.question }}</div>
                     <div v-if="u.student_answer" class="u-a">你的回答：{{ u.student_answer }}</div>
+                    <!-- 被追问过的话，把追问也摆出来：学生才知道是追到第几层还没答清楚 -->
+                    <div v-if="u.followup_question" class="u-a">
+                        ↳ 追问：{{ u.followup_question }}
+                        <template v-if="u.followup_answer">（你答：{{ u.followup_answer }}）</template>
+                    </div>
                     <div v-if="u.comment" class="u-a">{{ u.comment }}</div>
                 </div>
             </div>
@@ -503,7 +539,16 @@
 
         <!-- 评审会开始后：这里变成答题框，答不上来可以跳过 -->
         <template v-else>
-            <div v-if="awaiting" class="ask">{{ awaitingName }} 在等你回答，答不上来就点「跳过」</div>
+            <!-- 把"现在要答哪一条"整个摊开写清楚：一个议题里可能好几位评审问了话 -->
+            <div v-if="awaiting" class="ask">
+                <span class="ask-head">
+                    请回答 <b>{{ awaitingName }}</b> 的质询
+                    <span v-if="awaitingTotal > 1" class="ask-idx">
+                        本议题第 {{ awaitingIndex }}/{{ awaitingTotal }} 问
+                    </span>
+                </span>
+                <span class="ask-q">{{ awaitingQuestion }}</span>
+            </div>
             <textarea v-model="answerText" :disabled="running || !awaiting"
                       placeholder="回答评审的问题…"></textarea>
             <div class="row">
@@ -547,6 +592,9 @@
             started: false,     // 评审会是否已经开始，决定下面显示"提交方案"还是"答题框"
             awaiting: false,    // 是否停在"等学生回答"
             awaitingName: '',   // 在等谁的问题
+            awaitingQuestion: '', // 在等哪一条问题（原文，答题栏里要摊出来）
+            awaitingIndex: 0,   // 本议题第几问
+            awaitingTotal: 0,   // 本议题一共几问
             answerText: '',     // 答题框里的内容
             minutesLog: [],     // 会议纪要：质询记录时间线（散会时由后端给全）
             unresolved: []      // 未答好的问题清单，已按严重度排好
@@ -727,6 +775,7 @@
                 }
                 this.answerText = '';
                 this.awaiting = false;
+                this.awaitingQuestion = '';
                 this.running = true;
                 this.scrollToLatest();
 
@@ -755,6 +804,9 @@
                 this.started = false;
                 this.awaiting = false;
                 this.awaitingName = '';
+                this.awaitingQuestion = '';
+                this.awaitingIndex = 0;
+                this.awaitingTotal = 0;
                 this.answerText = '';
                 this.utterances = [];
                 this.current = null;
@@ -807,14 +859,16 @@
                         kind: 'note',
                         text: (e.name || '评审') + ' 判定：' + this.verdictText(e.verdict) +
                             '（严重度 ' + e.severity + '）' +
-                            (e.comment ? ' · ' + e.comment : '') +
-                            (e.followup ? ' · 继续追问' : '')
+                            (e.comment ? ' · ' + e.comment : '')
                     });
                     this.scrollToLatest();
                 } else if (e.event === 'await_answer') {
-                    // 图停下来了，轮到学生答
+                    // 图停下来了，轮到学生答这一条
                     this.awaiting = true;
                     this.awaitingName = e.name || '评审';
+                    this.awaitingQuestion = e.question || '';
+                    this.awaitingIndex = e.question_index || 1;
+                    this.awaitingTotal = e.issue_total || 1;
                     this.status = '';
                     this.scrollToLatest();
                 } else if (e.event === 'meeting_end') {

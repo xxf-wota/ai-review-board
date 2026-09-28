@@ -37,6 +37,7 @@ MARKERS = [
 DATA_KEYS = ["reviewers", "planText", "elements", "sessionId", "utterances",
              "current", "running", "error", "status", "summary",
              "started", "awaiting", "awaitingName", "answerText",
+             "awaitingQuestion", "awaitingIndex", "awaitingTotal",
              "minutesLog", "unresolved"]
 COMPUTED_KEYS = ["spokenRoles", "statusText"]
 METHOD_KEYS = ["listText", "isAbsent", "nameOf", "onFile", "submitPlan", "startMeeting",
