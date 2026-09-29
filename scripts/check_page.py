@@ -10,6 +10,7 @@
 7. 登录是贯通的：登录页把会话存下来 -> 主页面没登录会跳回来 -> 主页面用登录给的会话
 8. 旧的两个页面确实删掉了（不是"新页面放着、旧页面还留着"）
 """
+import json
 import os
 import re
 import subprocess
@@ -125,6 +126,66 @@ def js_syntax(html, tag):
         with open(err_tmp, encoding="utf-8") as f:
             detail = f.read().strip()[:500]
     return proc.returncode == 0, detail
+
+
+def fence_fallback(html):
+    """把页面里真正的 stripFence 抠出来，用 node 跑用例。
+
+    模型有时候会把整篇回答套进 ```markdown 里（实测存进 Redis 的原文就是这样），
+    marked 会把整篇当代码块渲染 —— 标题、加粗全不生效。这个兜底要是没了，
+    页面不会报错、只会默默变丑，所以必须拿真函数跑一遍，而不是看一眼代码里有没有这几个字。
+    """
+    start = html.find("stripFence: function")
+    if start < 0:
+        return False, "页面里找不到 stripFence"
+    end = html.find("\n            },", start)
+    if end < 0:
+        return False, "stripFence 找不到结尾"
+    fn = html[start:end + len("\n            },")]
+    if "this.stripFence(content)" not in html:
+        return False, "formatMessage 没有调用 stripFence（兜底等于没接上）"
+
+    cases = [
+        {"name": "带 markdown 标记的整篇（在正文中间）",
+         "input": "答案已经记录\n```markdown\n# 面试评价报告\n\n**加粗**\n```",
+         "expect": "# 面试评价报告", "no_fence": True},
+        {"name": "带 markdown 标记但还没闭合（流式吐到一半）",
+         "input": "答案已经记录\n```markdown\n# 面试评价报告\n\n**加粗**",
+         "expect": "# 面试评价报告", "no_fence": True},
+        {"name": "没写语言的整篇栅栏，里面是 Markdown",
+         "input": "```\n# 报告\n- 一\n- 二\n```",
+         "expect": "# 报告", "no_fence": True},
+        {"name": "真正的代码块要原样留着",
+         "input": "看这段：\n```python\nprint('hi')\n```",
+         "expect": "```python", "no_fence": False},
+        {"name": "普通 Markdown 不动",
+         "input": "## 标题\n正文 **加粗**",
+         "expect": "## 标题", "no_fence": False},
+    ]
+    harness = (
+        "var obj = {" + fn + "};\n"
+        "var cases = " + json.dumps(cases, ensure_ascii=False) + ";\n"
+        "var bad = [];\n"
+        "cases.forEach(function (c) {\n"
+        "    var out = obj.stripFence(c.input);\n"
+        "    if (out.indexOf(c.expect) === -1) bad.push(c.name + '：期望出现 ' "
+        "+ JSON.stringify(c.expect) + '，实际 ' + JSON.stringify(out.slice(0, 160)));\n"
+        "    if (c.no_fence && out.indexOf('```') !== -1) "
+        "bad.push(c.name + '：栅栏还留着 ' + JSON.stringify(out.slice(0, 160)));\n"
+        "});\n"
+        "if (bad.length) { console.log(bad.join('\\n')); process.exit(1); }\n"
+    )
+    js_tmp = os.path.join(ROOT, ".git", "_page_check_fence.js")
+    err_tmp = os.path.join(ROOT, ".git", "_page_check_fence.out")
+    with open(js_tmp, "w", encoding="utf-8") as f:
+        f.write(harness)
+    # 和 js_syntax 一样：stderr 重定向到文件，沙箱不允许子进程走管道
+    with open(err_tmp, "w", encoding="utf-8") as errf:
+        proc = subprocess.run(["node", js_tmp], stdout=errf, stderr=errf)
+    if proc.returncode == 0:
+        return True, ""
+    with open(err_tmp, encoding="utf-8") as f:
+        return False, f.read().strip()[:600]
 
 
 def main():
@@ -253,7 +314,15 @@ def main():
         log(f"\n  侧栏删除会话（按钮 + DELETE /session/<id> 带 user_id + 二次确认）："
             f"{'通过' if ok_delete else '不通过'}")
 
-        # 8) JS 语法
+        # 8) Markdown 兜底：模型把整篇回答套进 ```markdown 时，前端要拆壳再解析
+        # （实测存进 Redis 的面试评价报告原文就是这样，不拆的话整篇被当代码块渲染）
+        ok_md, md_err = fence_fallback(html)
+        log(f"\n  Markdown 栅栏兜底（带 markdown 标记的栅栏要拆壳，真代码块不动）："
+            f"{'通过' if ok_md else '不通过'}")
+        if md_err:
+            log("    " + md_err)
+
+        # 9) JS 语法
         ok_js, js_err = js_syntax(html, "app")
         log(f"\n  JS 语法检查（node --check）app.html  ：{'通过' if ok_js else '不通过'}")
         if js_err:
@@ -263,7 +332,7 @@ def main():
         if login_js_err:
             log("    " + login_js_err)
 
-        # 9) 前后端对账
+        # 10) 前后端对账
         log(f"\n  页面调用的接口（共 {len(called)} 个）：")
         bad = []
         for url in called:
@@ -276,7 +345,7 @@ def main():
             log(f"    {p}")
         log(f"\n  对账结果：{'全部存在' if not bad else '缺失 ' + str(bad)}")
 
-        # 10) 面试会话的复用分支：页面把本地存的 session_id 带回来，后端要走校验那条路
+        # 11) 面试会话的复用分支：页面把本地存的 session_id 带回来，后端要走校验那条路
         ok_reuse = True
         try:
             s1 = client.post("/create_session", json={"user_id": "page_check"}).json()["data"]
@@ -303,6 +372,7 @@ def main():
         ("登录页模板变量有定义  ", not lunknown),
         ("登录贯通              ", ok_wire),
         ("侧栏删除会话          ", ok_delete),
+        ("Markdown 栅栏兜底     ", ok_md),
         ("学生气泡靠右          ", ok_align),
         ("JS 语法 app.html      ", ok_js),
         ("JS 语法 login.html    ", ok_login_js),

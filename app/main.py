@@ -82,4 +82,5 @@ app.mount("/static", StaticFiles(directory="app/html"), name="static")
 if __name__ == '__main__':
     # loop 写死成 asyncio:SelectorEventLoop：uvicorn 在 Windows 上默认给的是 ProactorEventLoop，
     # psycopg 的异步模式直接报错起不来（策略那行对它无效，只能这样告诉它用哪个 loop）
-    uv.run(app, host="localhost", port=8000, loop="asyncio:SelectorEventLoop")
+    # 端口允许用环境变量 PORT 覆盖：验收脚本要自己起一个进程，不该和正在演示的那个抢 8000
+    uv.run(app, host="localhost", port=int(os.getenv("PORT", "8000")), loop="asyncio:SelectorEventLoop")

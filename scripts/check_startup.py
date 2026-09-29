@@ -10,8 +10,9 @@
   但 `python -m app.main` 一跑就崩。这里就是补这一刀。
 
 流程：
-  1. 8000 端口必须是空的（否则验的不是本次启动）
-  2. 子进程起 `python -m app.main`
+  1. 验收端口必须是空的（默认 8801，可以用 CHECK_PORT 改），
+     这样正在演示的那个服务（8000）不用关也能跑这份验收
+  2. 子进程起 `python -m app.main`（带 PORT=验收端口）
   3. 轮询直到服务可用，检查启动日志里没有 Traceback
   4. HTTP 走一遍：跳转 / 页面 / 会话新建 / 会话复用 / 别人拿去用被拒 / 登录 / 删会话
   5. 收尾，把子进程干掉
@@ -52,8 +53,8 @@ DB_URI = os.getenv("POSTGRESQL_URL")
 
 REPORT = os.path.join(ROOT, "data", "_startup_check.txt")
 LOG = os.path.join(ROOT, ".git", "_startup_server.log")
-BASE = "http://127.0.0.1:8000"
-PORT = 8000
+PORT = int(os.getenv("CHECK_PORT", "8801"))
+BASE = f"http://127.0.0.1:{PORT}"
 TIMEOUT = 60  # 秒。PostgreSQL 检查点首次 setup 建表会慢一点
 
 # 登录用的假邮箱：格式合法就行，登录检查不会真的发信
@@ -171,6 +172,7 @@ def main():
     proc = subprocess.Popen(
         [sys.executable, "-m", "app.main"],
         cwd=ROOT,
+        env=dict(os.environ, PORT=str(PORT)),
         stdin=subprocess.DEVNULL,
         stdout=logf,
         stderr=logf,
