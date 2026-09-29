@@ -218,6 +218,8 @@ python -m app.main
 | `python scripts/check_page.py` | 17 项：入口路由、标记齐全、旧页面确实删了、JS 语法（两个页面）、模板变量对账、前后端接口对账、登录贯通（登录页存会话 → 主页面没登录跳回 → 主页面接上会话）、侧栏删除会话（按钮 + `DELETE` + 归属者 + 二次确认）、气泡对齐不变式、Markdown 栅栏兜底（`stripFence` 的五个用例，带标记闭合／带标记未闭合／无标记整篇栅栏／真代码块不许动／普通 Markdown 不许动）、聊天列宽（消息列和输入框必须一样宽） |
 | `python scripts/init_review_db.py` | 建评审会两张表 + 增量补列 + 清掉废弃表与测试残留 |
 | `python scripts/make_defense_docs.py` | **答辩材料一键导出**（不是功能验收，是文档构建）：把 `docs/答辩材料-AI交叉质询评审团.md` 转成同名 `.txt` / `.pdf`，另送一份 `.docx`；转完自己验一遍（txt 无残留 Markdown 记号、标题不漏转、关键内容都在；pdf 能抽出文字、关键词命中、字体不缺字、页数够） |
+| `python scripts/dry_run_demo.py` | **演示预跑**（不是功能验收，是上台前自检）：不开网页，直接驱动评审会图把一整场开完，把每一问、每次接话、每条判定、未答好清单和**每问耗时**写进 `data/_demo_dry_run.txt`。`--expect-cross --expect-followup` 会要求这一场里接话和追问都真的出现过，没出现就非零退出 —— 这两个是演示的看点，不能靠赌 |
+| `python scripts/make_demo_inputs.py` | **演示输入素材包**的准备与自检：把 `data/` 下的样本收进 `docs/演示输入素材包/方案样本/`（缺的格式由同名 txt 现生成，所以两份样本三种格式都齐）、查每个样本能不能被 `parse_plan_bytes` 解析、同一份方案三种格式字数差是否在 5% 以内、回答稿是否覆盖四位评审与三种答法、卡片里点到的文件是否都在、预跑记录是否跑完了 |
 
 验收脚本会在 `data/` 下写报告。
 `check_startup.py` 自己起的服务跑在 **8801**（`CHECK_PORT` 可改），所以演示的那个服务开着（8000）也能跑这份验收，不用先关；`app/main.py` 的端口也是 `PORT` 环境变量可覆盖的。
@@ -244,6 +246,29 @@ python -m pip install fpdf2 --no-cache-dir --target .deps
 
 ---
 
+## 演示输入素材包
+
+`docs/演示输入素材包/` 是**上台时手上要用的东西**，不是讲稿：演示的输入只有三处（粘贴方案 → 回答评审提问 → 面试那半发一句话），这个包把三处要输入的字都提前写好。
+
+| 文件 | 用途 |
+|---|---|
+| `00_演示输入包.md` | 现场照着走的操作卡：流程表、每一问该粘哪段、三个"如果" |
+| `10_回答稿.txt` | 四位评审各准备了三段答话（答虚 / 半答 / 认真），现场按"谁在问"挑一段 |
+| `20_模拟面试输入.txt` | 第 10 步面试那半要发的句子与答案 |
+| `90_预跑记录.md` | 实测存档：它真的会问什么、三种答法分别被判成什么、每问耗时 |
+| `方案样本/` | `demo_plan`（主线）与 `sample_plan_eldercare`（备用）各 txt / docx / pdf，另附英文版备胎 |
+
+包里的样本由脚本从 `data/` 收进来并补齐格式，回答稿按"谁在问、关注什么"分类而不是按题号（模型的提问措辞每次都不同）：
+
+```bash
+python scripts/make_demo_inputs.py            # 准备 + 自检
+python scripts/dry_run_demo.py --strategy demo --expect-cross --expect-followup   # 上台前预跑
+```
+
+`dry_run_demo.py` 会**真开一场评审会**，所以它花的是真模型的调用；非零退出说明这一场没同时出现接话和追问，重跑一次再上台。
+
+---
+
 ## 测试样本
 
 `data/` 下有两份示例方案，**各自提供 txt / docx / pdf 三种格式**，可以直接拖到页面里上传：
@@ -252,6 +277,9 @@ python -m pip install fpdf2 --no-cache-dir --target .deps
 |---|---|
 | `demo_plan.*` | 校园二手教材交易平台，信息写得比较全，基础样本 |
 | `sample_plan_eldercare.*` | 社区居家养老系统，**技术 / 成本 / 合规 / 用户四个维度都留了破绽**，用来测评审效果 |
+
+> `demo_plan.pdf` 是后来由 `demo_plan.txt` 转出来的（原先只有 txt / docx，README 却写了三种格式）。
+> 现在由 `python scripts/make_demo_inputs.py` 负责补齐并自检，转丢了重跑一次即可。
 
 ---
 
