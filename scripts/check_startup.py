@@ -13,11 +13,15 @@
   1. 8000 端口必须是空的（否则验的不是本次启动）
   2. 子进程起 `python -m app.main`
   3. 轮询直到服务可用，检查启动日志里没有 Traceback
-  4. HTTP 走一遍：跳转 / 页面 / 会话新建 / 会话复用 / 别人拿去用被拒 / 登录
+  4. HTTP 走一遍：跳转 / 页面 / 会话新建 / 会话复用 / 别人拿去用被拒 / 登录 / 删会话
   5. 收尾，把子进程干掉
 
 登录这一层特意绕过发信：验证码直接写进 Redis 再调 /auth/login
 （真发一封邮件只为了跑一次检查，不合适；发信本身由人在页面上验）
+
+删会话这一层是"先造痕迹再删"：往窗口记忆 / 摘要 / 检查点 / 评审会两张表里
+各塞一条属于这场会话的数据，删完再逐样数一遍是不是真没了。
+只查接口返回 200 是不够的 —— 那样"接口答应了但什么都没删"也能过。
 """
 import json
 import os
@@ -28,9 +32,24 @@ import time
 import urllib.error
 import urllib.request
 
+import psycopg
 import redis as redis_sync
+from dotenv import load_dotenv
+from psycopg.types.json import Json
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+
+from app.ai.tool.review_dao import (  # noqa: E402
+    get_questions,
+    get_session,
+    save_questions,
+    save_session,
+)
+
+load_dotenv()
+DB_URI = os.getenv("POSTGRESQL_URL")
+
 REPORT = os.path.join(ROOT, "data", "_startup_check.txt")
 LOG = os.path.join(ROOT, ".git", "_startup_server.log")
 BASE = "http://127.0.0.1:8000"
@@ -39,6 +58,16 @@ TIMEOUT = 60  # 秒。PostgreSQL 检查点首次 setup 建表会慢一点
 
 # 登录用的假邮箱：格式合法就行，登录检查不会真的发信
 CHECK_EMAIL = "startup_check@example.com"
+# 删会话用的用户，和会话复用那几条区分开，免得互相踩
+DEL_USER = "delete_check"
+
+# 往检查点表里塞一行假的图状态，用来验证"删会话把检查点也清掉了"。
+# 结构照抄 langgraph 自己写进去的样子：checkpoint / metadata 两列是 jsonb
+SEED_CHECKPOINT = {
+    "v": 1, "id": "check-1", "ts": "2024-01-01T00:00:00+00:00",
+    "channel_values": {}, "channel_versions": {}, "versions_seen": {},
+}
+SEED_METADATA = {"source": "input", "step": 0, "writes": {}, "parents": {}}
 
 # 页面里必须出现的东西：两个智能体在同一个页面上，历史存在 localStorage，刷新才接得回去
 PAGE_MARKERS = [
@@ -95,6 +124,28 @@ def http_post_raw(path, payload):
             return e.code, json.loads(body)
         except ValueError:
             return e.code, {"detail": body}
+
+
+def http_delete_raw(path):
+    """DELETE，返回 (状态码, json)。403 这种也要把内容拿到，不能让它直接抛"""
+    req = urllib.request.Request(BASE + path, method="DELETE")
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return r.status, json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", "replace")
+        try:
+            return e.code, json.loads(body)
+        except ValueError:
+            return e.code, {"detail": body}
+
+
+def pg_count(table, column, value):
+    """数这张表里命中几行。删会话的验收要按表数，不能只看接口返回什么"""
+    with psycopg.connect(DB_URI) as con:
+        with con.cursor() as cur:
+            cur.execute(f"select count(*) from {table} where {column} = %s", (value,))
+            return cur.fetchone()[0]
 
 
 def main():
@@ -160,6 +211,7 @@ def main():
         ok_route = ok_login_route = ok_review_route = ok_page = ok_login_page = False
         ok_reuse = ok_deny = False
         ok_bad_email = ok_wrong_code = ok_login = ok_login_session = ok_code_once = False
+        ok_purged = ok_gone = ok_deny_delete = False
         if up:
             # 1) 三个入口：/ 和 /review 都先落到登录页（登录页看本地状态决定放不放行）
             status, url, _ = http_get("/")
@@ -240,6 +292,71 @@ def main():
             log(f"    同一个验证码不能再登一次    -> {'是' if ok_code_once else '否'}")
             rc.delete(f"auth:code:{CHECK_EMAIL}")
 
+            # 6) 删会话：先给这场会话造齐痕迹，删完逐样数一遍
+            del_sid = http_post("/create_session",
+                                {"user_id": DEL_USER, "session_id": ""})["data"]
+            rc.rpush(f"window_memory:{del_sid}",
+                     json.dumps({"role": "user", "content": "验收用的一句话"},
+                                ensure_ascii=False))
+            with psycopg.connect(DB_URI) as con:
+                with con.cursor() as cur:
+                    cur.execute(
+                        "insert into conversation_summary(session_id, summary) values (%s, %s) "
+                        "on conflict(session_id) do update set summary = excluded.summary",
+                        (del_sid, "验收用摘要"),
+                    )
+                    cur.execute(
+                        "insert into checkpoints "
+                        "(thread_id, checkpoint_ns, checkpoint_id, type, checkpoint, metadata) "
+                        "values (%s, '', 'check-1', 'json', %s, %s)",
+                        (del_sid, Json(SEED_CHECKPOINT), Json(SEED_METADATA)),
+                    )
+                con.commit()
+            # 评审会那两张表也塞一条，验证一场评审会的记录跟着会话一起走
+            save_session(del_sid, "验收用方案", "验收用的方案正文", {}, "")
+            save_questions(del_sid, [{"round": 1, "speaker_role": "tech",
+                                      "question": "验收用的质询问题"}])
+            seeded = {
+                "redis 会话记录": rc.exists(del_sid),
+                "窗口记忆": rc.exists(f"window_memory:{del_sid}"),
+                "PG 摘要": pg_count("conversation_summary", "session_id", del_sid),
+                "检查点": pg_count("checkpoints", "thread_id", del_sid),
+                "评审会记录": 0 if get_session(del_sid) is None else 1,
+                "质询记录": len(get_questions(del_sid)),
+            }
+            log(f"\n  给这场会话造好的痕迹          -> {seeded}")
+
+            st_del, body_del = http_delete_raw(f"/session/{del_sid}?user_id={DEL_USER}")
+            left = {
+                "redis 会话记录": rc.exists(del_sid),
+                "窗口记忆": rc.exists(f"window_memory:{del_sid}"),
+                "PG 摘要": pg_count("conversation_summary", "session_id", del_sid),
+                "检查点": pg_count("checkpoints", "thread_id", del_sid),
+                "评审会记录": 0 if get_session(del_sid) is None else 1,
+                "质询记录": len(get_questions(del_sid)),
+            }
+            ok_purged = st_del == 200 and all(v in (0, False) for v in left.values())
+            log(f"  DELETE /session/<删掉的那场>  -> {st_del} {body_del.get('msg')}")
+            log(f"    清完还剩：{left}")
+            log(f"    痕迹全清干净                -> {'是' if ok_purged else '否'}")
+
+            # 删掉的会话不能再被"复用"顶回来（检查点没清的话它还能接着往下答）
+            r5 = http_post("/create_session", {"user_id": DEL_USER, "session_id": del_sid})
+            ok_gone = r5.get("data") != del_sid
+            log(f"  拿删掉的会话再 /create_session -> {r5['msg']} / {r5['data']}")
+            log(f"    删掉的会话回不来了          -> {'是' if ok_gone else '否'}")
+
+            # 别人的会话删不掉：先拒，再确认它还在
+            st_403, body_403 = http_delete_raw(f"/session/{sid}?user_id=someone_else")
+            ok_deny_delete = st_403 == 403 and rc.exists(sid) == 1
+            log(f"  换个用户去删别人的会话        -> {st_403} {body_403.get('detail')}")
+            log(f"    被拒且会话还在              -> {'是' if ok_deny_delete else '否'}")
+
+            # 收尾：用真正的归属者把它删掉（顺带再走一遍成功路径）
+            st_own, body_own = http_delete_raw(f"/session/{sid}?user_id=startup_check")
+            log(f"  归属者自己删（收尾）          -> {st_own} {body_own.get('msg')}")
+            log(f"    会话记录已清                -> {rc.exists(sid) == 0}")
+
     finally:
         if proc.poll() is None:
             proc.terminate()
@@ -268,6 +385,9 @@ def main():
         ("登录成功（并顺手建了会话）    ", ok_login),
         ("登录给的会话能接着用          ", ok_login_session),
         ("验证码一次性                  ", ok_code_once),
+        ("删会话清干净痕迹              ", ok_purged),
+        ("删掉的会话回不来              ", ok_gone),
+        ("别人的会话删不掉              ", ok_deny_delete),
     ]
     for title, ok in checks:
         log(f"  {title}：{'通过' if ok else '不通过'}")

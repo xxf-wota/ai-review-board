@@ -130,6 +130,24 @@ def get_questions(session_id: str) -> list:
         conn.close()
 
 
+# 删除一场评审会：两张表一起清（删会话时用），返回各自删了几行
+# review_question 先删：它挂着 session_id，语义上属于 review_session 的下属记录
+def delete_session(session_id: str) -> dict:
+    if not session_id:
+        return {"review_question": 0, "review_session": 0}
+    conn = get_mysql_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("delete from review_question where session_id=%s", (session_id,))
+        n_question = cur.rowcount
+        cur.execute("delete from review_session where session_id=%s", (session_id,))
+        n_session = cur.rowcount
+        conn.commit()
+        return {"review_question": int(n_question or 0), "review_session": int(n_session or 0)}
+    finally:
+        conn.close()
+
+
 # 会议结束，把会话状态改成已结束，轮次记为实际开到了第几轮
 def finish_session(session_id: str, round_no: int = 1) -> int:
     if not session_id:

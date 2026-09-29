@@ -8,6 +8,8 @@ from langgraph.graph import END, START, StateGraph
 
 from app.ai.agent.memory.manager.memory_manager import MemoryManager
 from app.ai.agent.memory.manager.session_mananger import SessionManager
+from app.ai.agent.memory.save.summary_memory import SummaryMemory
+from app.ai.agent.memory.save.window_memory import window_key
 from app.ai.agent.multi_agent.node.answer_node import answer_node
 from app.ai.agent.multi_agent.node.chat_node import chat_node
 from app.ai.agent.multi_agent.node.evaluate_node import evaluate_node
@@ -37,6 +39,11 @@ else
     return 0
 end
 """
+
+
+def lock_key(session_id: str) -> str:
+    """会话锁在 Redis 里的键。删会话时要顺手把它也清掉，所以抽成函数"""
+    return f"lock:session:{session_id}"
 
 
 class ExamGraphAgent:
@@ -96,6 +103,40 @@ class ExamGraphAgent:
             return False, "会话不属于该用户"
         return True, "会话有效"
 
+    async def purge_session(self, session_id: str) -> dict:
+        """
+        把一场面试会话留下的东西全清掉：Redis 会话记录 / 窗口记忆 / 会话锁 /
+        PostgreSQL 摘要 / 检查点里这条 thread。
+
+        检查点必须一起清：面试图的状态挂在 thread_id=session_id 上，
+        只删 Redis 记录的话，那个"已经删掉的会话"还能接着往下答（踩过这个直觉陷阱）。
+
+        长期记忆（Chroma）和画像是按 user_id 存的、跨会话共用，这里一个都不动 ——
+        那是"清空这个学生"，不是"删掉这场会话"。
+        """
+        report = {
+            "redis_session": 0, "window_memory": 0, "lock": 0,
+            "summary": 0, "checkpoint_thread": False,
+        }
+        # Redis 里的三个键：会话本身、窗口记忆、会话锁（锁是临时的，顺手一起收）
+        if self.redis:
+            report["redis_session"] = int(await self.redis.delete(session_id) or 0)
+            report["window_memory"] = int(await self.redis.delete(window_key(session_id)) or 0)
+            report["lock"] = int(await self.redis.delete(lock_key(session_id)) or 0)
+
+        report["summary"] = await SummaryMemory(session_id).delete()
+
+        try:
+            # 面试图和评审图共用这一个 saver，各自的 thread_id 互不影响
+            await self.memory.adelete_thread(session_id)
+            report["checkpoint_thread"] = True
+        except Exception as e:
+            # 检查点没清成不该让整个删除失败，但得让人看得见
+            print(f"清会话检查点失败：{session_id} -> {e}")
+
+        print(f"已清会话：{session_id} -> {report}")
+        return report
+
     # ---------- 异步会话锁 ----------
     @contextlib.asynccontextmanager
     async def _session_lock(self, session_id: str):
@@ -103,7 +144,7 @@ class ExamGraphAgent:
         同一个 session 同一时刻只允许一个请求进入
         用 SET NX PX 抢锁，抢不到直接报"会话忙"，而不是排队等（等下去会拖垮连接）
         """
-        key = f"lock:session:{session_id}"
+        key = lock_key(session_id)
         token = uuid.uuid4().hex
         # nx=True：key 不存在才设置成功；px：毫秒级过期
         ok = await self.redis.set(key, token, nx=True, px=LOCK_TTL_MS)

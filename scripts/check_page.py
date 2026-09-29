@@ -54,6 +54,7 @@ DATA_KEYS = ["userId", "mode", "auth",
 COMPUTED_KEYS = ["historyList", "activeIndex", "chatMessages", "modeSub", "rvStatusText"]
 METHOD_KEYS = ["loadAuth", "adoptLoginSession", "logout",
                "save", "restore", "switchMode", "newSession", "openHistory",
+               "removeSession", "dropHistory",
                "jumpToBottom", "jumpToBottomSoon", "formatMessage", "ensureSession", "sendChat",
                "listText", "isAbsent", "nameOf", "verdictText", "summaryOf", "loadRecord",
                "onFile", "submitPlan", "pump", "startMeeting", "submitAnswer", "handleReviewEvent"]
@@ -239,7 +240,20 @@ def main():
         log(f"\n  登录贯通（登录页存会话 -> 主页面没登录跳回 -> 主页面接上这个会话）："
             f"{'通过' if ok_wire else '不通过'}")
 
-        # 7) JS 语法
+        # 7) 侧栏删除会话：按钮在模板里、点了走后端 DELETE、会话 id 和用户都带上了。
+        # @click.stop 不能少，否则点 ✕ 会穿透到 openHistory（顺手把会话切走）
+        ok_delete = (
+            'class="hist-del"' in html
+            and '@click.stop="removeSession(i)"' in html
+            and "method: 'DELETE'" in html
+            and "'/session/' + encodeURIComponent(item.id)" in html
+            and "'?user_id=' + encodeURIComponent(this.userId)" in html
+            and "window.confirm" in html
+        )
+        log(f"\n  侧栏删除会话（按钮 + DELETE /session/<id> 带 user_id + 二次确认）："
+            f"{'通过' if ok_delete else '不通过'}")
+
+        # 8) JS 语法
         ok_js, js_err = js_syntax(html, "app")
         log(f"\n  JS 语法检查（node --check）app.html  ：{'通过' if ok_js else '不通过'}")
         if js_err:
@@ -249,7 +263,7 @@ def main():
         if login_js_err:
             log("    " + login_js_err)
 
-        # 7) 前后端对账
+        # 9) 前后端对账
         log(f"\n  页面调用的接口（共 {len(called)} 个）：")
         bad = []
         for url in called:
@@ -262,7 +276,7 @@ def main():
             log(f"    {p}")
         log(f"\n  对账结果：{'全部存在' if not bad else '缺失 ' + str(bad)}")
 
-        # 8) 面试会话的复用分支：页面把本地存的 session_id 带回来，后端要走校验那条路
+        # 10) 面试会话的复用分支：页面把本地存的 session_id 带回来，后端要走校验那条路
         ok_reuse = True
         try:
             s1 = client.post("/create_session", json={"user_id": "page_check"}).json()["data"]
@@ -288,6 +302,7 @@ def main():
         ("主页面模板变量有定义  ", not unknown),
         ("登录页模板变量有定义  ", not lunknown),
         ("登录贯通              ", ok_wire),
+        ("侧栏删除会话          ", ok_delete),
         ("学生气泡靠右          ", ok_align),
         ("JS 语法 app.html      ", ok_js),
         ("JS 语法 login.html    ", ok_login_js),

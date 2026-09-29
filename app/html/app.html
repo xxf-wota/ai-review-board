@@ -123,15 +123,45 @@
         }
 
         .hist {
+            display: flex;
+            align-items: center;
+            gap: 6px;
             padding: 8px 10px;
             border-radius: 8px;
             font-size: 13px;
             color: #444;
             cursor: pointer;
+        }
+
+        /* 省略号必须放在标题这一层：原来靠 .hist 自己 overflow 截断，
+           现在右边多了个 ✕，会被挤出可视区 */
+        .hist-title {
+            flex: 1;
+            min-width: 0;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
+
+        /* 删除按钮平时藏着，鼠标移到这条记录上才显形，免得侧栏看着全是叉 */
+        .hist-del {
+            flex: none;
+            width: 20px;
+            height: 20px;
+            padding: 0;
+            border: 0;
+            border-radius: 6px;
+            background: transparent;
+            color: var(--muted);
+            font-family: inherit;
+            font-size: 12px;
+            line-height: 1;
+            cursor: pointer;
+            opacity: 0;
+        }
+
+        .hist:hover .hist-del, .hist.on .hist-del { opacity: 1; }
+        .hist-del:hover { background: #f6d9d9; color: #c0392b; }
 
         .hist:hover { background: var(--hover); }
         .hist.on { background: #fff; border: 1px solid var(--line); color: var(--text); }
@@ -565,7 +595,9 @@
             <div v-for="(h, i) in historyList" :key="i"
                  class="hist" :class="{ on: i === activeIndex }"
                  :title="h.title" @click="openHistory(i)">
-                {{ h.title }}
+                <span class="hist-title">{{ h.title }}</span>
+                <button class="hist-del" title="删除这条会话"
+                        @click.stop="removeSession(i)">✕</button>
             </div>
             <div v-if="!historyList.length" class="hist empty">还没有记录</div>
         </div>
@@ -1007,6 +1039,71 @@
                 this.save();
                 this.jumpToBottom();
             },
+            // 删一场会话：后端把这场会留在 Redis / PostgreSQL / MySQL 里的东西全清掉，
+            // 成功之后才从侧栏拿掉 —— 反过来的话会出现"看着删了、刷新又回来了"
+            removeSession: function (i) {
+                var self = this;
+                var item = this.historyList[i];
+                if (!item) return;
+
+                // 正在跑的那条不许删：后端图正停在这一场的检查点上，边删边答会出怪事
+                if (i === this.activeIndex && this.mode === 'review' && this.reviewRunning) {
+                    window.alert('这场评审会正在开，等它结束或者刷新页面再删。');
+                    return;
+                }
+                if (i === this.activeIndex && this.mode === 'interview' && this.chatStreaming) {
+                    window.alert('这句话还在回答中，等它答完再删这场会话。');
+                    return;
+                }
+
+                if (!window.confirm('删除「' + (item.title || '这条会话') + '」？\n\n' +
+                                    '这场会话的记录和它记住的东西都会被清掉，删了拿不回来。')) return;
+
+                // 还没跟后端建过会话的空记录（id 为空）只需要在本地拿掉
+                if (!item.id) {
+                    this.dropHistory(i);
+                    return;
+                }
+
+                fetch('/session/' + encodeURIComponent(item.id) +
+                      '?user_id=' + encodeURIComponent(this.userId), { method: 'DELETE' })
+                    .then(function (r) {
+                        return r.json().then(function (d) { return { ok: r.ok, d: d }; });
+                    })
+                    .then(function (res) {
+                        if (!res.ok) throw new Error(res.d.detail || '删除失败');
+                        self.dropHistory(i);
+                    })
+                    .catch(function (err) {
+                        window.alert('删除失败：' + (err.message || err));
+                    });
+            },
+
+            // 从侧栏拿掉第 i 条，并把当前选中项挪到还存在的记录上；一条都不剩就开个新的
+            dropHistory: function (i) {
+                var arr = this.mode === 'interview' ? this.chatList : this.reviewList;
+                var wasActive = i === this.activeIndex;
+                arr.splice(i, 1);
+                // 删的不是当前这条时，选中项要跟着数组前移一起挪，
+                // 否则高亮会悄悄跑到邻居身上（列表按下标找，不看对象）
+                var idx = wasActive ? Math.min(i, arr.length - 1)
+                                    : this.activeIndex - (i < this.activeIndex ? 1 : 0);
+                idx = Math.max(idx, 0);
+                if (this.mode === 'interview') {
+                    this.chatActive = idx;
+                } else {
+                    this.reviewActive = idx;
+                    if (wasActive) {
+                        this.rv = arr[idx] || this.rv;
+                        // 换到的那一场本地没存过程、但库里有 -> 读回来当只读回看
+                        if (this.rv.id && !this.rv.utterances.length) this.loadRecord(this.rv);
+                    }
+                }
+                if (!arr.length) this.newSession();   // newSession 自己会 save()
+                else this.save();
+                this.jumpToBottom();
+            },
+
             openHistory: function (i) {
                 if (this.mode === 'interview') {
                     this.chatActive = i;

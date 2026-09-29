@@ -67,3 +67,15 @@ class SummaryMemory:
                 )
                 rs = await cur.fetchone()
                 return rs[0] if rs else ""
+
+    async def delete(self) -> int:
+        """删掉这场会话的摘要，返回删了几行（删会话时用；没有这一行也算成功）"""
+        async with pool.connection() as con:
+            async with con.cursor() as cur:
+                await cur.execute(
+                    "DELETE FROM conversation_summary WHERE session_id = %s",
+                    (self.session_id,),
+                )
+                n = cur.rowcount
+            await con.commit()
+        return int(n or 0)

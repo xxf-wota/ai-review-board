@@ -13,12 +13,17 @@ load_dotenv()
 """
 
 
+def window_key(session_id: str) -> str:
+    """窗口记忆在 Redis 里的键。删会话的时候要按同样的格式把它找出来，所以抽成函数"""
+    return f"window_memory:{session_id}"
+
+
 class WindowMemory:
 
     def __init__(self, session_id):
         self.redis = redis.StrictRedis(host="localhost", port=6379, db=0)
         self.session_id = session_id
-        self.key = f"window_memory:{self.session_id}"
+        self.key = window_key(self.session_id)
         # 保留多少条消息。原代码直接 int(os.getenv(...))，
         # 环境变量没配就 int(None) 崩掉，所以这里给默认值
         self.window_size = int(os.getenv("WINDOW_MEMORY_ROUNDS") or 40)
