@@ -140,6 +140,7 @@ def manager_node(state: ReviewState):
         max_per_issue = state.get("max_cross_per_issue", MAX_CROSS_PER_ISSUE)
         max_total = state.get("max_cross_total", MAX_CROSS_TOTAL)
         # 本议题已经判定过一轮了，不再重复判定；接话环节结束，去等学生回答
+        # 这个判断针对于一轮中第一次接话后更新了 cross_checked 为 True，后续再进入，就直接等待回答了
         if state.get("cross_checked"):
             return _await_pending(state)
         # 额度用完就不再判定，省一次模型调用，直接去等学生回答
