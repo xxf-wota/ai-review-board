@@ -69,3 +69,6 @@ data/_*.txt
 chroma_db/
 *.gguf
 *.bin
+
+# 仓库内的本地依赖（答辩材料导出用的 fpdf2 等，只在本机用）
+.deps/

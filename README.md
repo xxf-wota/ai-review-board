@@ -65,7 +65,7 @@ app/
   html/                     # 前端：login.html（登录）、app.html（单页，两个智能体共用一套外壳）
   main.py                   # 入口
 data/                       # 测试方案样本
-docs/                       # 选题方案、实测记录、评审会流程图
+docs/                       # 选题方案、实测记录、评审会流程图、答辩材料（md/txt/pdf/docx）
 scripts/                    # 建表 / 造素材 / 验收脚本
 ```
 
@@ -217,11 +217,30 @@ python -m app.main
 | `python scripts/check_startup.py` | **真起一次服务**（子进程 `python -m app.main`），16 项：事件循环、三个入口跳转、两个页面标记、会话复用与归属、登录（码错／码对／一次性／登录给的会话能接着用）、删会话（先给这场会造齐 Redis／摘要／检查点／评审记录的痕迹，删完逐样数一遍是不是真没了；删掉的会话回不来；别人的会话删不掉）—— TestClient 抓不到的那一层 |
 | `python scripts/check_page.py` | 17 项：入口路由、标记齐全、旧页面确实删了、JS 语法（两个页面）、模板变量对账、前后端接口对账、登录贯通（登录页存会话 → 主页面没登录跳回 → 主页面接上会话）、侧栏删除会话（按钮 + `DELETE` + 归属者 + 二次确认）、气泡对齐不变式、Markdown 栅栏兜底（`stripFence` 的五个用例，带标记闭合／带标记未闭合／无标记整篇栅栏／真代码块不许动／普通 Markdown 不许动）、聊天列宽（消息列和输入框必须一样宽） |
 | `python scripts/init_review_db.py` | 建评审会两张表 + 增量补列 + 清掉废弃表与测试残留 |
+| `python scripts/make_defense_docs.py` | **答辩材料一键导出**（不是功能验收，是文档构建）：把 `docs/答辩材料-AI交叉质询评审团.md` 转成同名 `.txt` / `.pdf`，另送一份 `.docx`；转完自己验一遍（txt 无残留 Markdown 记号、标题不漏转、关键内容都在；pdf 能抽出文字、关键词命中、字体不缺字、页数够） |
 
 验收脚本会在 `data/` 下写报告。
 `check_startup.py` 自己起的服务跑在 **8801**（`CHECK_PORT` 可改），所以演示的那个服务开着（8000）也能跑这份验收，不用先关；`app/main.py` 的端口也是 `PORT` 环境变量可覆盖的。
 `check_startup.py` 里登录那几条**故意绕过发信**（验证码直接写进 Redis 再调接口）—— 验收不该往人邮箱里发东西。
 **M1~M5 的实测数据都留在 `docs/选题方案` 里**，那些验证脚本按答辩需要精简掉了 —— 现场演示时人工走一遍流程即可。
+
+---
+
+## 答辩材料
+
+`docs/答辩材料-AI交叉质询评审团.md` 是源文件，`.txt` / `.pdf` / `.docx` 都由它生成，改完源文件重跑一次脚本即可：
+
+```bash
+python scripts/make_defense_docs.py
+```
+
+PDF 用 `fpdf2` 生成（文字可选可搜索、中文用系统 `msyh.ttc` 子集化）。如果本机没装 `fpdf2` 又不想动全局环境，可以装进仓库里的 `.deps/`（脚本会自动把这个目录加进 `sys.path`）：
+
+```bash
+python -m pip install fpdf2 --no-cache-dir --target .deps
+```
+
+`.deps/` 只在本机用，不进仓库。装不上也不影响——脚本会退回 PIL 图片版 PDF（能看，但文字不可选中），并在报告里说明。
 
 ---
 
