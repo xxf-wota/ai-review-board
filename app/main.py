@@ -13,6 +13,7 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from app.ai.agent.memory.save.summary_memory import ensure_table, pool
 from app.ai.agent.multi_agent.graph.exam_graph_agent import ExamGraphAgent
 from app.ai.agent.review_agent.graph.review_graph import ReviewGraph
+from app.web.auth_router.auth_router import auth_router
 from app.web.chat_router.chat_router import chat_router
 from app.web.default_page_router.default_page_router import default_page_router
 from app.web.review_router.review_router import review_router
@@ -37,6 +38,8 @@ async def content_manager(app: FastAPI):
 
         # Redis：会话、会话锁、窗口记忆、用户画像
         r = redis.StrictRedis(host="localhost", port=6379, db=0)
+        # 登录那边也要用它（存验证码 + 发送冷却），挂到 app 上让它自己取
+        app.state.redis = r
 
         # 模拟面试：带会话管理、异步会话锁、四层记忆
         app.state.exam_agent = ExamGraphAgent(saver, r)
@@ -57,12 +60,15 @@ async def content_manager(app: FastAPI):
         await pool.close()
         app.state.exam_agent = None
         app.state.review_agent = None
+        app.state.redis = None
         print("AI模拟面试智能体关闭成功")
 
 
 app = FastAPI(lifespan=content_manager)
 # 配置默认页面路由
 app.include_router(default_page_router)
+# 配置登录路由
+app.include_router(auth_router)
 # 配置子路由
 app.include_router(chat_router)
 app.include_router(wb_router)

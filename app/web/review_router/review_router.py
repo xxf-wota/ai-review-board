@@ -208,7 +208,8 @@ async def meeting_answer(request: Request, payload: dict = Body(...)):
     return _sse(graph.resume(session_id, answer))
 
 
-# 评审会页面。两个智能体现在共用一个页面，这里带上 tab 参数直接落到评审团那一侧
+# 评审会页面。两个智能体现在共用一个页面，这里带上 tab 参数直接落到评审团那一侧。
+# 先过登录页：登录页会看本地有没有登录状态，登过了就带着 tab 直接放行到页面
 @review_router.get("")
 def review_page():
-    return RedirectResponse(url="/static/app.html?tab=review")
+    return RedirectResponse(url="/static/login.html?tab=review")

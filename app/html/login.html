@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 · AI 答辩陪练</title>
+    <!-- Vue2 CDN，和 app.html 用同一份 -->
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.7.14/dist/vue.js"></script>
+    <style>
+        /*
+         * 登录页：邮箱 + 验证码，就这两样。
+         * 配色和 app.html 一套，看起来像同一个产品。
+         */
+        * { box-sizing: border-box; }
+
+        :root {
+            --line: #e5e5e5;
+            --text: #0d0d0d;
+            --muted: #8e8e8e;
+            --hover: #ececec;
+            --accent: #4a8cf7;
+            --danger: #d93026;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text);
+            background: #fafafa;
+            font-family: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", system-ui, sans-serif;
+        }
+
+        .card {
+            width: 360px;
+            padding: 30px 30px 26px;
+            background: #fff;
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            box-shadow: 0 6px 24px rgba(0, 0, 0, .05);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            font-weight: 600;
+            font-size: 17px;
+        }
+
+        .brand .logo {
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            background: var(--accent);
+            color: #fff;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .sub {
+            margin: 10px 0 20px;
+            font-size: 12.5px;
+            color: var(--muted);
+            line-height: 1.6;
+        }
+
+        label {
+            display: block;
+            font-size: 12.5px;
+            color: var(--muted);
+            margin-bottom: 5px;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            font-family: inherit;
+            font-size: 14px;
+            color: var(--text);
+            background: #fff;
+            outline: none;
+        }
+
+        input:focus { border-color: var(--accent); }
+        input:disabled { background: #f5f5f5; color: var(--muted); }
+
+        .field { margin-bottom: 14px; }
+
+        /* 验证码那一行：输入框吃掉剩下的宽度，按钮固定宽度 */
+        .row { display: flex; gap: 8px; }
+        .row input { flex: 1; min-width: 0; }
+
+        button {
+            font-family: inherit;
+            font-size: 13.5px;
+            border-radius: 10px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        button:disabled { opacity: .5; cursor: not-allowed; }
+
+        .ghost {
+            padding: 10px 12px;
+            border: 1px solid var(--line);
+            background: #fff;
+            color: var(--text);
+        }
+
+        .ghost:not(:disabled):hover { background: var(--hover); }
+
+        .primary {
+            width: 100%;
+            margin-top: 6px;
+            padding: 11px;
+            border: 1px solid var(--accent);
+            background: var(--accent);
+            color: #fff;
+            font-size: 14.5px;
+        }
+
+        .primary:not(:disabled):hover { background: #3a7ce4; border-color: #3a7ce4; }
+
+        .msg {
+            margin: 10px 0 0;
+            font-size: 12.5px;
+            line-height: 1.6;
+            word-break: break-all;
+        }
+
+        .msg.err { color: var(--danger); }
+        .msg.tip { color: var(--muted); }
+    </style>
+</head>
+<body>
+<div id="app">
+    <div class="card">
+        <div class="brand">
+            <span class="logo">AI</span>
+            <span>AI 答辩陪练</span>
+        </div>
+        <p class="sub">邮箱收验证码登录。登录后直接进模拟面试，<br>左下角可以切到交叉质询评审团。</p>
+
+        <div class="field">
+            <label>邮箱</label>
+            <input v-model="email" type="email" placeholder="you@example.com"
+                   :disabled="loading" @keyup.enter="sendCode">
+        </div>
+
+        <div class="field">
+            <label>验证码</label>
+            <div class="row">
+                <input v-model="code" type="text" inputmode="numeric" maxlength="6"
+                       placeholder="6 位数字" :disabled="loading" @keyup.enter="login">
+                <button class="ghost" @click="sendCode" :disabled="countdown > 0 || sending || loading">
+                    {{ countdown > 0 ? countdown + ' 秒后重发' : (sending ? '发送中…' : '获取验证码') }}
+                </button>
+            </div>
+        </div>
+
+        <button class="primary" @click="login" :disabled="loading">
+            {{ loading ? '登录中…' : '登录' }}
+        </button>
+
+        <p v-if="err" class="msg err">{{ err }}</p>
+        <p v-else-if="tip" class="msg tip">{{ tip }}</p>
+    </div>
+</div>
+
+<script>
+    // 登录状态存这里：邮箱 + user_id + 登录时后端建好的 session_id
+    var AUTH = 'exam_agent.auth.v1';
+
+    new Vue({
+        el: '#app',
+        data: {
+            email: '',
+            code: '',
+            countdown: 0,      // 重发倒计时，秒
+            sending: false,
+            loading: false,
+            err: '',
+            tip: '',
+            timer: null
+        },
+        mounted: function () {
+            var saved = null;
+            try { saved = JSON.parse(localStorage.getItem(AUTH) || 'null'); } catch (e) { saved = null; }
+
+            // 已经登录过就直接进主界面，不用再登一次
+            if (saved && saved.session_id) { this.enter(); return; }
+            // 没登录过，但记得上次填的邮箱，省得重打
+            if (saved && saved.email) this.email = saved.email;
+        },
+        beforeDestroy: function () {
+            if (this.timer) clearInterval(this.timer);
+        },
+        methods: {
+            // 登录成功后进主界面，把 tab 带过去（/review 是直接落到评审团那一侧的）
+            enter: function () {
+                var tab = (window.location.search.match(/[?&]tab=([^&]+)/) || [])[1];
+                window.location.replace('/static/app.html' + (tab ? '?tab=' + tab : ''));
+            },
+
+            post: function (url, body) {
+                return fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                }).then(function (r) {
+                    // 后端出错时返回的是 {detail: "..."}，正常是 {code, msg, data}
+                    return r.json().then(function (j) { return { status: r.status, body: j }; });
+                });
+            },
+
+            sendCode: function () {
+                var self = this;
+                var email = this.email.trim();
+                if (!email) { this.err = '先填邮箱'; this.tip = ''; return; }
+                if (this.sending || this.countdown > 0) return;
+
+                this.sending = true;
+                this.err = '';
+                this.tip = '正在发验证码…';
+                this.post('/auth/send_code', { email: email }).then(function (res) {
+                    self.sending = false;
+                    if (res.status !== 200) {
+                        self.err = (res.body && res.body.detail) || '发送失败';
+                        self.tip = '';
+                        return;
+                    }
+                    self.err = '';
+                    self.tip = '验证码已经发到 ' + email + '，5 分钟内有效';
+                    self.startCountdown(60);
+                }).catch(function (e) {
+                    self.sending = false;
+                    self.err = '请求失败：' + e;
+                    self.tip = '';
+                });
+            },
+
+            startCountdown: function (sec) {
+                var self = this;
+                this.countdown = sec;
+                if (this.timer) clearInterval(this.timer);
+                this.timer = setInterval(function () {
+                    self.countdown -= 1;
+                    if (self.countdown <= 0) {
+                        clearInterval(self.timer);
+                        self.timer = null;
+                        self.countdown = 0;
+                    }
+                }, 1000);
+            },
+
+            login: function () {
+                var self = this;
+                var email = this.email.trim();
+                var code = this.code.trim();
+                if (!email) { this.err = '先填邮箱'; this.tip = ''; return; }
+                if (!code) { this.err = '先填验证码'; this.tip = ''; return; }
+                if (this.loading) return;
+
+                this.loading = true;
+                this.err = '';
+                this.tip = '';
+                this.post('/auth/login', { email: email, code: code }).then(function (res) {
+                    if (res.status !== 200) {
+                        self.loading = false;
+                        self.err = (res.body && res.body.detail) || '登录失败';
+                        return;
+                    }
+                    // 存下来：主界面靠它拿 user_id 和会话
+                    try {
+                        localStorage.setItem(AUTH, JSON.stringify({
+                            email: res.body.data.email,
+                            user_id: res.body.data.user_id,
+                            session_id: res.body.data.session_id,
+                            at: Date.now()
+                        }));
+                    } catch (e) {
+                        self.loading = false;
+                        self.err = '本地存不下登录状态（浏览器禁用了 localStorage？）';
+                        return;
+                    }
+                    self.tip = '登录成功，正在进入…';
+                    self.enter();
+                }).catch(function (e) {
+                    self.loading = false;
+                    self.err = '请求失败：' + e;
+                });
+            }
+        }
+    });
+</script>
+</body>
+</html>
