@@ -322,7 +322,19 @@ def main():
         if md_err:
             log("    " + md_err)
 
-        # 9) JS 语法
+        # 9) 聊天列宽：消息列和输入框得一样宽，否则输入框跟消息左右错开。
+        # 760px 居中在宽屏上两边会空出一大截（用户说的"左右间距太大"就是这个），
+        # 所以顺手钉一个下限，以后改窄了会红
+        def _max_width(selector):
+            m = re.search(re.escape(selector) + r"\s*\{[^}]*max-width:\s*(\d+)px", css)
+            return int(m.group(1)) if m else None
+
+        w_thread, w_composer = _max_width(".thread-inner"), _max_width(".composer-inner")
+        ok_width = w_thread is not None and w_thread == w_composer and w_thread >= 1000
+        log(f"\n  聊天列宽（消息列 {w_thread}px / 输入框 {w_composer}px，要一样宽且不低于 1000）："
+            f"{'通过' if ok_width else '不通过'}")
+
+        # 10) JS 语法
         ok_js, js_err = js_syntax(html, "app")
         log(f"\n  JS 语法检查（node --check）app.html  ：{'通过' if ok_js else '不通过'}")
         if js_err:
@@ -332,7 +344,7 @@ def main():
         if login_js_err:
             log("    " + login_js_err)
 
-        # 10) 前后端对账
+        # 11) 前后端对账
         log(f"\n  页面调用的接口（共 {len(called)} 个）：")
         bad = []
         for url in called:
@@ -345,7 +357,7 @@ def main():
             log(f"    {p}")
         log(f"\n  对账结果：{'全部存在' if not bad else '缺失 ' + str(bad)}")
 
-        # 11) 面试会话的复用分支：页面把本地存的 session_id 带回来，后端要走校验那条路
+        # 12) 面试会话的复用分支：页面把本地存的 session_id 带回来，后端要走校验那条路
         ok_reuse = True
         try:
             s1 = client.post("/create_session", json={"user_id": "page_check"}).json()["data"]
@@ -373,6 +385,7 @@ def main():
         ("登录贯通              ", ok_wire),
         ("侧栏删除会话          ", ok_delete),
         ("Markdown 栅栏兜底     ", ok_md),
+        ("聊天列宽一致          ", ok_width),
         ("学生气泡靠右          ", ok_align),
         ("JS 语法 app.html      ", ok_js),
         ("JS 语法 login.html    ", ok_login_js),
