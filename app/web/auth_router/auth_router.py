@@ -74,7 +74,7 @@ async def send_code(request: Request, body: EmailSchema):
             email,
             "【AI 答辩陪练】登录验证码",
             f"你的登录验证码是 {code}，{CODE_TTL // 60} 分钟内有效。\n\n"
-            f"如果不是你本人在登录，忽略这封邮件就行。",
+            f"如果不是你本人在登录，请忽略这封邮件。",
         )
     except Exception as e:
         print(f"验证码邮件发送失败：{e}")
