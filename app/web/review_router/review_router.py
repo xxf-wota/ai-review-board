@@ -5,13 +5,13 @@ from fastapi import APIRouter, Body, File, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse, StreamingResponse
 
 from app.ai.agent.review_agent.node.extract_node import extract_elements, format_elements
-from app.ai.agent.review_agent.node.judge_node import SKIP_MARK, collect_unresolved
+from app.ai.agent.review_agent.node.judge_node import SKIP_MARK
+from app.ai.agent.review_agent.store.question_store import collect_unresolved
 from app.ai.tool.plan_parser import parse_plan_bytes
 from app.ai.tool.review_dao import (
     finish_session,
     get_questions,
     get_session,
-    save_questions,
     save_session,
 )
 
@@ -110,20 +110,22 @@ async def read_session(session_id: str):
     return data
 
 
-# 会议一结束就把纪要落库：质询记录进 review_question，会话状态改 finished
+# 会议一结束就收尾：会话状态改 finished
+# 质询记录现在是**边开边写透**的（发言落库、判定回填，见 store/question_store.py），
+# 所以这里不再整批重写一遍 —— 写的是同一份内容，还会把记录的 id 全部换掉，
+# 而状态里的索引正是按 id 认记录的
 # 前端是边收流边渲染的，落库失败不该把已经开完的会毁掉，所以这里只打日志不往上抛
 def _save_minutes(event: dict) -> None:
     session_id = event.get("session_id") or ""
     log = event.get("question_log") or []
-    if not session_id or not log:
+    if not session_id:
         return
     try:
-        save_questions(session_id, log)
         rounds = [int(q.get("round") or 1) for q in log]
         finish_session(session_id, max(rounds) if rounds else 1)
-        print(f"评审纪要已落库：{session_id}，{len(log)} 条")
+        print(f"评审会已结束：{session_id}，{len(log)} 条质询记录")
     except Exception as e:
-        print(f"-----------评审纪要落库失败：{e}------------")
+        print(f"-----------评审会收尾失败：{e}------------")
 
 
 # 用 SSE 把过程实时推到前端。用 POST 而不是 EventSource：方案正文可能上万字，塞不进 URL，

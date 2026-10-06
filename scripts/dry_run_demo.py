@@ -112,7 +112,7 @@ async def run(plan_path, pick, strategy_name, max_round):
     from app.ai.agent.review_agent.graph.review_graph import ReviewGraph
     from app.ai.agent.review_agent.node.extract_node import extract_elements, format_elements
     from app.ai.agent.review_agent.node.judge_node import SKIP_MARK
-    from app.ai.agent.review_agent.node.speaker_node import REVIEWER_NAMES
+    from app.ai.agent.review_agent.reviewers import REVIEWER_NAMES
 
     with open(plan_path, encoding="utf-8") as f:
         plan_text = f.read().strip()

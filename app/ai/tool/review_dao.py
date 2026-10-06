@@ -100,32 +100,127 @@ def save_questions(session_id: str, question_log: list) -> int:
         conn.close()
 
 
+# 单条质询记录：问题一抛出来就写一条，返回自增 id。
+# 与 save_questions 的"整批替换"分工不同 —— 这是评审会进行中的写透，
+# 图的状态里只留这个 id，正文（问题/回答/评语）都在库里
+def append_question(session_id: str, item: dict) -> int:
+    conn = get_mysql_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "insert into review_question "
+            "(session_id, round, speaker_role, question_type, target_speaker, "
+            " question, student_answer, verdict, verdict_comment, severity, followup_depth) "
+            "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+            (
+                session_id,
+                int(item.get("round") or 1),
+                item.get("speaker_role") or "",
+                item.get("question_type") or "main",
+                item.get("target_speaker") or "",
+                item.get("question") or "",
+                item.get("student_answer") or "",
+                item.get("verdict") or "",
+                item.get("verdict_comment") or "",
+                int(item.get("severity") or 0),
+                int(item.get("followup_depth") or 0),
+            ),
+        )
+        conn.commit()
+        return int(cur.lastrowid)
+    finally:
+        conn.close()
+
+
+# 回填一条记录的判定结果：学生答完、判定出来就写，散会时不用再补
+def update_verdict(question_id: int, answer: str, verdict: str, severity: int,
+                   comment: str) -> int:
+    conn = get_mysql_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "update review_question set student_answer=%s, verdict=%s, severity=%s, "
+            "verdict_comment=%s where id=%s",
+            (answer or "", verdict or "", int(severity or 0), comment or "",
+             int(question_id)),
+        )
+        conn.commit()
+        return cur.rowcount
+    finally:
+        conn.close()
+
+
+# 质询记录的字段顺序：select 和"行转字典"共用一份，免得改了一处漏一处
+# id 一定要带上：状态里存的就是它（索引 -> 正文全靠这个键对回去），
+# 排查问题时也要能一眼把状态里的索引和库里的行对上
+_QUESTION_SELECT = (
+    "id, round, speaker_role, question_type, target_speaker, question, "
+    "student_answer, verdict, verdict_comment, severity, followup_depth"
+)
+
+
+# 一行质询记录 -> 字典。键名和图里用的名字一致，所以状态索引和归档记录能直接对上
+def _row_to_item(row) -> dict:
+    return {
+        "id": row[0],
+        "round": row[1],
+        "speaker_role": row[2],
+        "question_type": row[3],
+        "target_speaker": row[4] or "",
+        "question": row[5] or "",
+        "student_answer": row[6] or "",
+        "verdict": row[7] or "",
+        "verdict_comment": row[8] or "",
+        "severity": row[9],
+        "followup_depth": row[10],
+    }
+
+
+# 按 id 取回指定的几条记录，按 id 升序 —— 也就是发言顺序。
+# 状态索引里只有 id，节点要用哪一段正文就拿哪些 id 来取
+def get_questions_by_ids(ids: list) -> list:
+    ids = [int(i) for i in (ids or []) if i]
+    if not ids:
+        return []
+    marks = ",".join(["%s"] * len(ids))
+    conn = get_mysql_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            f"select {_QUESTION_SELECT} from review_question "
+            f"where id in ({marks}) order by id",
+            ids,
+        )
+        return [_row_to_item(r) for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+
 # 读回一场评审会的质询记录，按 id 升序 —— 也就是发言顺序
 def get_questions(session_id: str) -> list:
     conn = get_mysql_conn()
     try:
         cur = conn.cursor()
         cur.execute(
-            "select round, speaker_role, question_type, target_speaker, question, "
-            "student_answer, verdict, verdict_comment, severity, followup_depth "
-            "from review_question where session_id=%s order by id",
+            f"select {_QUESTION_SELECT} from review_question "
+            f"where session_id=%s order by id",
             (session_id,),
         )
-        return [
-            {
-                "round": r[0],
-                "speaker_role": r[1],
-                "question_type": r[2],
-                "target_speaker": r[3] or "",
-                "question": r[4],
-                "student_answer": r[5] or "",
-                "verdict": r[6] or "",
-                "verdict_comment": r[7] or "",
-                "severity": r[8],
-                "followup_depth": r[9],
-            }
-            for r in cur.fetchall()
-        ]
+        return [_row_to_item(r) for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+
+# 清掉一场评审会的质询记录。重开一场会时先清，避免新旧记录叠在一起
+def delete_questions(session_id: str) -> int:
+    if not session_id:
+        return 0
+    conn = get_mysql_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("delete from review_question where session_id=%s", (session_id,))
+        conn.commit()
+        return cur.rowcount
     finally:
         conn.close()
 

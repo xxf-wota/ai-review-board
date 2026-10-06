@@ -1,8 +1,8 @@
 from langgraph.graph import END
 from langgraph.types import Command
 
-from app.ai.agent.review_agent.node.judge_node import current_issue, first_unjudged
 from app.ai.agent.review_agent.state.review_state import ReviewState
+from app.ai.agent.review_agent.store.question_store import current_issue, first_unjudged
 
 """
 评审会调度中枢
@@ -19,6 +19,9 @@ from app.ai.agent.review_agent.state.review_state import ReviewState
 一个议题里可能好几位评审都问了话，学生**按提问顺序一条一条答**，每条由那条问题的提问者判。
 这样屏幕上永远只有一个"待你回答"，不会出现"三个人一起问我该答谁"
 （这个坑是照着实际界面截图改的）
+
+这个节点是同步的，而且是唯一一个每一步都要跑的中枢，所以它只读 state 里的索引
+（question_index），一行正文都不取、一次库都不查 —— 取正文是发言/判定节点的事
 """
 # 默认发言顺序，按技术评审、成本与进度评审、合规评审、用户与价值评审
 DEFAULT_ORDER = ["tech", "cost", "compliance", "user"]
@@ -39,6 +42,7 @@ _ISSUE_RESET = {
     "pending_type": "",
     "pending_question": "",
     "pending_from": "",
+    "pending_id": 0,
     "followup_depth": 0,
     "followup_hint": "",
     "student_answer": "",
@@ -79,17 +83,19 @@ def _next_speaker(state: ReviewState):
 # 停在"等学生回答"上，等的是本议题里第一条还没判过的问题。
 # goto=END 意味着这次请求到此为止，前端弹出答题框，学生答完再发一次请求把图唤醒
 def _await_pending(state: ReviewState):
-    item = first_unjudged(current_issue(state.get("question_log") or []))
+    item = first_unjudged(current_issue(state.get("question_index") or []))
     if not item:
         # 理论上到不了这儿（刚问完必定有一条没判）。兜底换下一位，别把会议卡死
         print("本议题没有待答的问题，直接换下一位")
         return _next_speaker(state)
     return Command(goto=END, update={
         "meeting_phase": "await_answer",
-        # 这三个字段决定"这一问是谁问的、问的什么"，学生答完由他判定
+        # 这四个字段决定"这一问是谁问的、问的什么"，学生答完由他判定。
+        # pending_id 是库里那条记录的 id，判定时按它精确定位
         "pending_question": item.get("question") or "",
         "pending_type": item.get("question_type") or "main",
         "pending_from": item.get("speaker_role") or "",
+        "pending_id": item.get("id") or 0,
         "student_answer": "",
     })
 
@@ -99,14 +105,15 @@ def _await_pending(state: ReviewState):
 #   2. 都答完了，有人没被说服 -> 由他追一层（每个议题只追一次）
 #   3. 否则                   -> 换下一位评审
 def _route_after_judge(state: ReviewState):
-    issue = current_issue(state.get("question_log") or [])
+    issue = current_issue(state.get("question_index") or [])
     if first_unjudged(issue):
         return _await_pending(state)
 
     depth = state.get("followup_depth", 0) or 0
     asked = any(x.get("question_type") == "followup" for x in issue)
     if depth < MAX_FOLLOWUP and not asked:
-        # 按提问顺序找第一个"没被说服、而且给出了追问方向"的问题，由它的提问者来追
+        # 按提问顺序找第一个"没被说服、而且给出了追问方向"的问题，由它的提问者来追。
+        # 判定结果和追问方向都在索引里，不用取正文
         for item in issue:
             if item.get("question_type") == "followup":
                 continue
@@ -118,6 +125,7 @@ def _route_after_judge(state: ReviewState):
                     "followup_depth": depth + 1,
                     "followup_hint": item["followup_hint"],
                     "pending_question": "",
+                    "pending_id": 0,
                     "student_answer": "",
                 })
     return _next_speaker(state)
@@ -144,6 +152,7 @@ def manager_node(state: ReviewState):
         if state.get("cross_checked"):
             return _await_pending(state)
         # 额度用完就不再判定，省一次模型调用，直接去等学生回答
+        # 即如果将接话次数设置为0，就直接跳过cross，直接去等学生回答
         if state.get("cross_in_issue", 0) >= max_per_issue:
             return _await_pending(state)
         if state.get("cross_total", 0) >= max_total:

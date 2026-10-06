@@ -3,7 +3,7 @@ import re
 from langchain.agents import create_agent
 from langchain.agents.middleware import ModelCallLimitMiddleware
 from langchain.agents.structured_output import ProviderStrategy
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import HumanMessage
 
 from app.ai.agent.review_agent import events
 from app.ai.agent.review_agent.schema.review_schema import PlanElementsSchema
@@ -157,10 +157,11 @@ def extract_node(state: ReviewState):
     elements_text = format_elements(elements)
     # 要素表单独作为一条事件推给前端，界面上要把它展示成一个面板
     events.emit({"event": "elements", "text": elements_text})
-    # 自定义AI回复消息，把要素表回显给前端
-    ai_msg = f"\n方案要素抽取完成：\n{elements_text}\n"
+    # 方案全文抽完要素就没用了（正文在库里存着，要看去 /review/session 读），
+    # 顺手清出状态：一份方案可能两万字，而检查点是每个超步整份写一遍的，留着太亏。
+    # 注意清的是"抽取节点自己消费掉的输入"，不是要素表 —— 要素表全场都要用
     return {
-        "messages": [AIMessage(content=ai_msg)],
+        "plan_text": "",
         "plan_elements": elements,
         "meeting_phase": "main",
     }

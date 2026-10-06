@@ -1,17 +1,14 @@
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ProviderStrategy
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import HumanMessage
 
-from app.ai.agent.review_agent import events
+from app.ai.agent.review_agent import events, reviewers
 from app.ai.agent.review_agent.node.extract_node import format_elements
-from app.ai.agent.review_agent.node.speaker_node import (
-    PROMPTS,
-    REVIEWER_CONCERNS,
-    REVIEWER_NAMES,
-    first_question,
-)
+from app.ai.agent.review_agent.node.speaker_node import first_question
+from app.ai.agent.review_agent.reviewers import PROMPTS, REVIEWER_CONCERNS, REVIEWER_NAMES
 from app.ai.agent.review_agent.schema.review_schema import CrossSchema
 from app.ai.agent.review_agent.state.review_state import ReviewState
+from app.ai.agent.review_agent.store import question_store as store
 from app.ai.model.my_model import MyModel
 from app.ai.prompt.builder_prompt import BuilderPromptYaml
 from app.ai.utils.text_util import similarity
@@ -22,34 +19,27 @@ from app.ai.utils.text_util import similarity
 
 判定只做一次模型调用，一次拿到四个人的意愿：
 逐个去问要四次调用，而且每个人都只看自己那一份，判断不出"谁最该说话"
+
+发言正文不在状态里：判定要看的"刚才的发言"、接话针对的那句话、以及
+"我是不是在炒自己的冷饭"，都按索引去库里取（store/question_store.py）
 """
 # 读取外部配置文件
 prompt = BuilderPromptYaml.get_prompt("review/crosstalk.yaml")
 # 接话时的表达规则：人设提示词里写着"只提一个问题、不评价别人"，
 # 那套要求会和接话冲突，所以接话时在它后面追加这一段，把格式要求改过来
 speak_prompt = BuilderPromptYaml.get_prompt("review/crosstalk_speak.yaml")
+# 接话判定只看最近几条发言：给多了模型挑花眼，给少了它不知道刚才在吵什么
+RECENT_LIMIT = 6
 
 
-# 把最近的发言拼成文本，让判定的模型知道刚才发生了什么
-def _recent_transcript(question_log: list, limit: int = 6) -> str:
-    lines = []
-    for item in (question_log or [])[-limit:]:
-        who = REVIEWER_NAMES.get(item["speaker_role"], item["speaker_role"])
-        if item.get("question_type") == "cross":
-            target = REVIEWER_NAMES.get(item.get("target_speaker", ""), "学生")
-            lines.append(f"【{who}】接{target}的话：{item['question']}")
-        else:
-            lines.append(f"【{who}】{item['question']}")
-    return "\n".join(lines) if lines else "（还没有人发言）"
-
-
-# 一次调用，拿到四位评审各自的接话意愿
+# 一次调用，拿到四位评审各自的接话意愿。
+# recent_rows 是最近几条发言的正文（从库里按索引取的，不是状态里带的）
 # 必须是 async：cross_node 是异步节点，在里面调用同步阻塞的 invoke 会卡住事件循环，
 # 后续的流式发言一个 chunk 都收不到（实测踩过这个坑）
-async def judge_cross(plan_elements: dict, question_log: list, spoke_in_issue: list) -> list:
+async def judge_cross(plan_elements: dict, recent_rows: list, spoke_in_issue: list) -> list:
     content = (
         f"以下是学生提交的方案要素表：\n{format_elements(plan_elements)}\n\n"
-        f"以下是本场评审会刚才的发言：\n{_recent_transcript(question_log)}\n\n"
+        f"以下是本场评审会刚才的发言：\n{store.recent_transcript(recent_rows)}\n\n"
         f"本议题已经发过言的评审是：{'、'.join(spoke_in_issue) if spoke_in_issue else '无'}\n"
         "请判断每一位评审是否要接话。"
     )
@@ -71,7 +61,7 @@ async def judge_cross(plan_elements: dict, question_log: list, spoke_in_issue: l
 
 
 # 挑出该接话的那位：想接话、本议题还没发过言、严重度最高
-def pick_reaction(reactions: list, spoke_in_issue: list, order: list, question_log: list = None):
+def pick_reaction(reactions: list, spoke_in_issue: list, order: list, index: list = None):
     candidates = [
         r for r in reactions
         if r.get("want") and r.get("role") in order and r.get("role") not in spoke_in_issue
@@ -79,9 +69,9 @@ def pick_reaction(reactions: list, spoke_in_issue: list, order: list, question_l
     if not candidates:
         return None
 
-    # 统计每个人整场已经接过几次话
+    # 统计每个人整场已经接过几次话。看索引就够，不用把发言正文取回来
     cross_count = {}
-    for item in (question_log or []):
+    for item in (index or []):
         if item.get("question_type") == "cross":
             who = item.get("speaker_role")
             cross_count[who] = cross_count.get(who, 0) + 1
@@ -101,13 +91,14 @@ def pick_reaction(reactions: list, spoke_in_issue: list, order: list, question_l
 
 # 判断一句接话是不是在炒冷饭：抄了对方原话，或者重复自己之前问过的
 # 本地模型实测两个毛病都会犯，抄对方的话等于没接，重复自己的话更难看
-def _too_repetitive(text: str, target_question: str, question_log: list, role: str) -> bool:
+# own_questions 是这位评审在这场里问过的其他问题（调用方按索引从库里取回来）
+def _too_repetitive(text: str, target_question: str, own_questions: list = None) -> bool:
     if not text:
         return False
     if target_question and similarity(text, target_question) >= 0.7:
         return True
-    for item in question_log or []:
-        if item.get("speaker_role") == role and similarity(text, item.get("question", "")) >= 0.7:
+    for question in (own_questions or []):
+        if question and similarity(text, question) >= 0.7:
             return True
     return False
 
@@ -115,31 +106,31 @@ def _too_repetitive(text: str, target_question: str, question_log: list, role: s
 # 图节点：判定 + 接话发言
 async def cross_node(state: ReviewState):
     plan_elements = state.get("plan_elements") or {}
-    question_log = list(state.get("question_log") or [])
+    index = list(state.get("question_index") or [])
     spoke = list(state.get("spoke_in_issue") or [])
     order = state.get("speaker_order") or ["tech", "cost", "compliance", "user"]
 
+    # 判定要看刚才的发言，正文在库里，按索引取最近几条
+    recent_rows = await store.rows_of(index[-RECENT_LIMIT:])
+
     # 判定失败不能让会议中断，当作"没人接话"继续往下走
     try:
-        reactions = await judge_cross(plan_elements, question_log, spoke)
+        reactions = await judge_cross(plan_elements, recent_rows, spoke)
     except Exception as e:
         print(f"-----------接话判定失败，本议题不接话：{e}------------")
         return {"cross_checked": True}
 
-    pick = pick_reaction(reactions, spoke, order, question_log)
+    pick = pick_reaction(reactions, spoke, order, index)
     if not pick:
         print("本议题没有人需要接话")
         return {"cross_checked": True}
 
     role = pick["role"]
-    # 接话针对的是上一位主问题发言者
-    # next() + 生成器表达式 + reversed() 组合，实现"从后往前找第一个满足条件的元素"
-    last_main = next(
-        (q for q in reversed(question_log) if q.get("question_type") in ("main", "followup")),
-        None,
-    )
-    target = last_main["speaker_role"] if last_main else ""
-    target_question = last_main["question"] if last_main else ""
+    # 接话针对的是上一位主问题发言者。
+    # 索引里只有 id，问题原文按 id 去库里取（判定过的条目状态里已经不存原文了）
+    last = store.last_ref(index)
+    target = (last or {}).get("speaker_role") or ""
+    target_question = (await store.question_of(last)) if last else ""
 
     # 只把对方那一句话拎出来，不要把整段记录倒给它
     # 之前把全部发言记录给进去，模型会直接抄自己那句，完全不理对方
@@ -183,7 +174,9 @@ async def cross_node(state: ReviewState):
     # 质量兜底：接话不能是炒冷饭。抄对方原话等于没接，重复自己之前问过的更难看
     # （本地模型实测两个毛病都会犯）重试一次，还是不行就放弃这次接话
     who = REVIEWER_NAMES.get(role, role)
-    if _too_repetitive(text, target_question, question_log, role):
+    # 我自己在这场里问过的其他问题，按索引去库里取
+    own_questions = [r.get("question", "") for r in await store.rows_of_role(index, role)]
+    if _too_repetitive(text, target_question, own_questions):
         print(f"-----------{who}接话在炒冷饭，重试一次：{text[:40]}------------")
         try:
             rs = await agent.ainvoke({"messages": [HumanMessage(content=(
@@ -195,10 +188,9 @@ async def cross_node(state: ReviewState):
             text = first_question(str(retry_msgs[-1].content or "")) if retry_msgs else ""
         except Exception as e:
             print(f"-----------{who}接话重试失败：{e}------------")
-        if _too_repetitive(text, target_question, question_log, role):
+        if _too_repetitive(text, target_question, own_questions):
             print(f"-----------{who}接话仍在炒冷饭，本次放弃接话------------")
             return {"cross_checked": True}
-
 
     target_name = REVIEWER_NAMES.get(target, target)
     # 模型没吐出内容时兜底：拿判定阶段整理的理由顶上，并写清是针对谁说的
@@ -208,27 +200,18 @@ async def cross_node(state: ReviewState):
     events.speaker_start(role, who, "cross", target, target_name)
     events.token(role, text)
     events.speaker_end(role, who, text, "cross", target, target_name)
-    log = list(question_log)
-    log.append({
-        "round": state.get("round", 1),
-        "speaker_role": role,
-        "question_type": "cross",
-        "target_speaker": target,
-        "question": text,
-        "student_answer": "",
-        "verdict": "",
-        "verdict_comment": "",
-        "severity": pick.get("severity", 0),
-        "followup_depth": 0,
-        "ctype": pick.get("ctype", "rebut"),
-    })
+    # 接话也是学生要回答的一条：落库拿 id，正文进库、索引只留 id
+    entry = store.new_entry(state.get("round", 1) or 1, role, "cross",
+                            question=text, target=target,
+                            severity=pick.get("severity", 0) or 0)
+    await store.ask(state.get("session_id") or "", entry)
+    index.append(entry)
     if role not in spoke:
         spoke.append(role)
 
     return {
-        "messages": [AIMessage(content=f"\n【{who}】⟶ 接{target_name}的话：{text}\n")],
         # 注意：不改 pending_question / pending_type / pending_from。
-        # "学生接下来答哪一条"是 manager 从 question_log 里推出来的（本议题第一条没判过的），
+        # "学生接下来答哪一条"是 manager 从索引里推出来的（本议题第一条没判过的），
         # 接话节点在这儿写这三个字段只会被覆盖，还容易让人误以为接话抢了主问题的位置
         "meeting_phase": "cross",
         # 置位后 manager 才会推进到下一位，避免在 cross 上打转
@@ -236,5 +219,5 @@ async def cross_node(state: ReviewState):
         "cross_in_issue": state.get("cross_in_issue", 0) + 1,
         "cross_total": state.get("cross_total", 0) + 1,
         "spoke_in_issue": spoke,
-        "question_log": log,
+        "question_index": index,
     }
