@@ -54,6 +54,10 @@ app/
         store/              # 索引与正文的分离层：状态里只留记录 id，正文写 MySQL 按需取
         reviewers.py        # 四位评审的名字 / 关注点 / 人设提示词（单独一层，避免循环导入）
     model/my_model.py       # 模型单例（本地 Ollama + 商业模型降级）
+    utils/
+      text_util.py          # 字面相似度（大二字组 Jaccard，只在向量模型不可用时兜底）
+      embed_util.py         # 本地 ONNX 向量模型（接话去重用；换 bge 需先转 ONNX）
+      rerank_util.py        # 本地 ONNX 重排序模型（备选判据，本版没接进判定，只用于标定对照）
     prompt/
       review/               # 四位评审人设 + 要素抽取规则（yaml）
     tool/
@@ -221,6 +225,9 @@ python -m app.main
 | `python scripts/init_review_db.py` | 建评审会两张表 + 增量补列 + 清掉废弃表与测试残留 |
 | `python scripts/check_review_index.py` | 29 项：**离线跑完一整场评审会**（假模型，不调 Ollama、不联网）验收"状态只存索引、正文在 MySQL"这条改造 —— 索引 id 与库主键逐条对齐、判定后问题原文从状态里消失、回答与评语落回库里那条、散会纪要由库现取、接话指向谁、追问只追一层、重开同一会话先清旧记录且新旧 id 不重叠。这层改造任何一处回退它都会变红（验过：只把 `store.reset` 换成空函数，正好 2 项失败） |
 | `python scripts/measure_review_tokens.py` | **不是验收，是量尺**：用真实会话把每一次模型调用的提示词按类目复原、估 token，并对比"整份 `question_log` 进状态"与"只留索引"两种写法的检查点累计体积（同一场真实会议：428 KB → 50 KB，8.7 倍）。`--rounds 3` 可投影多轮会议 |
+| `python scripts/check_dedup.py` | 17 项：**接话去重的离线自检**（不调大模型）。判据本身（逐字重复要认出来、换个说法也要认出来、不同的问题不能误杀、空文本/库里没记录不报错）+ 节点级真写 MySQL 的四个场景（炒冷饭要重试一次且把被重复的那句念给模型、重试仍重复就放弃且不落库、本来不重复就不许多花一次调用、向量模型不可用时兜底判据照样拦得住逐字重复）。`--reverse` 把阈值抬到 1.01 反向验证，**7 项按预期变红** |
+| `python scripts/calibrate_dedup.py` | **不是验收，是标定尺**：把真评审会里的接话逐条算"与对方原话 / 与自己问过的 / 与议题内他人 / 与整场每一句"的字面相似度与向量余弦，扫 0.50~0.90 各档会挡掉几条、点出被挡的是哪些 id；顺带给出重排序模型的对照分数（备选方案，本版没启用）。`--all` 聚合最近 8 场，报告 `data/_dedup_calibration.txt` —— 现在用的 0.80 与"整场比对"这个口径就是它量出来的 |
+| `python scripts/dump_session_rows.py <session_id>` | 把某场评审会的记录倒成 UTF-8 文本（控制台是 GBK，中文会乱码），排查"这场到底问了什么、判成什么"时用 |
 | `python scripts/make_defense_docs.py` | **答辩材料一键导出**（不是功能验收，是文档构建）：把 `docs/答辩材料-AI交叉质询评审团.md` 转成同名 `.txt` / `.pdf`，另送一份 `.docx`；转完自己验一遍（txt 无残留 Markdown 记号、标题不漏转、关键内容都在；pdf 能抽出文字、关键词命中、字体不缺字、页数够） |
 | `python scripts/dry_run_demo.py` | **演示预跑**（不是功能验收，是上台前自检）：不开网页，直接驱动评审会图把一整场开完，把每一问、每次接话、每条判定、未答好清单和**每问耗时**写进 `data/_demo_dry_run.txt`。`--expect-cross --expect-followup` 会要求这一场里接话和追问都真的出现过，没出现就非零退出 —— 这两个是演示的看点，不能靠赌 |
 | `python scripts/make_demo_inputs.py` | **演示输入素材包**的准备与自检：把 `data/` 下的样本收进 `docs/演示输入素材包/方案样本/`（缺的格式由同名 txt 现生成，所以两份样本三种格式都齐）、查每个样本能不能被 `parse_plan_bytes` 解析、同一份方案三种格式字数差是否在 5% 以内、回答稿是否覆盖四位评审与三种答法、卡片里点到的文件是否都在、预跑记录是否跑完了 |
@@ -312,3 +319,10 @@ python scripts/dry_run_demo.py --strategy demo --expect-cross --expect-followup 
 - **删除会话的归属校验只有面试那一半拦得住**：面试会话在 Redis 里有 `user_id`，删的时候能对一下；评审会的 `session_id` 是裸 hex、从来不进 Redis，`review_session.student_id` 目前也是空串，所以删评审会时没有归属信息可查（按幂等删除处理）。要补的话得在提交方案时把登录的 `user_id` 一起写进 `review_session`。
 - 页面通过 CDN 加载 Vue，**断网会白屏**；现场演示前建议先把依赖本地化。
 - 本地 `qwen2.5:7b` 能跑通全链路，但接话内容质量在多次运行之间波动明显；正式演示建议走商业模型。
+- **接话去重靠本地向量模型**（`app/ai/utils/embed_util.py`，ONNX，不占显存、不装 torch）：
+  口径是"和整场之前问过的每一句比余弦，≥ 0.80 就重试一次并告知重复的是哪一句，仍重复就放弃这次接话"。
+  这个阈值与范围是拿 8 场真模型评审会、26 条真实接话量出来的（标定脚本 `scripts/calibrate_dedup.py`）：
+  换度量前的字面判据只拦得住 1 条，换余弦后拦得住 13 条。模型由 `.env` 的 `EMBED_MODEL_DIR` 指向
+  （默认 `F:/models/paraphrase-multilingual-MiniLM-L12-v2`）；**模型目录不在或加载失败时不报错，
+  自动退回字面相似度**（弱得多，只认逐字重复）—— 这条兜底路径由 `scripts/check_dedup.py` 单独验。
+  另有一份重排序模型实现（`rerank_util.py`）作为备选判据，判定路径没用它。

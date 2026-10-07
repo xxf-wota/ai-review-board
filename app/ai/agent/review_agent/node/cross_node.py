@@ -1,6 +1,7 @@
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ProviderStrategy
 from langchain_core.messages import HumanMessage
+import numpy as np
 
 from app.ai.agent.review_agent import events, reviewers
 from app.ai.agent.review_agent.node.extract_node import format_elements
@@ -11,6 +12,7 @@ from app.ai.agent.review_agent.state.review_state import ReviewState
 from app.ai.agent.review_agent.store import question_store as store
 from app.ai.model.my_model import MyModel
 from app.ai.prompt.builder_prompt import BuilderPromptYaml
+from app.ai.utils import embed_util
 from app.ai.utils.text_util import similarity
 
 """
@@ -20,8 +22,9 @@ from app.ai.utils.text_util import similarity
 判定只做一次模型调用，一次拿到四个人的意愿：
 逐个去问要四次调用，而且每个人都只看自己那一份，判断不出"谁最该说话"
 
-发言正文不在状态里：判定要看的"刚才的发言"、接话针对的那句话、以及
-"我是不是在炒自己的冷饭"，都按索引去库里取（store/question_store.py）
+发言正文不在状态里：判定要看的"刚才的发言"、接话针对的那句话，以及
+"这句接话是不是把整场里已经问过的某个问题又说了一遍"，都按索引去库里取
+（store/question_store.py）
 """
 # 读取外部配置文件
 prompt = BuilderPromptYaml.get_prompt("review/crosstalk.yaml")
@@ -89,18 +92,46 @@ def pick_reaction(reactions: list, spoke_in_issue: list, order: list, index: lis
     ))
 
 
-# 判断一句接话是不是在炒冷饭：抄了对方原话，或者重复自己之前问过的
-# 本地模型实测两个毛病都会犯，抄对方的话等于没接，重复自己的话更难看
-# own_questions 是这位评审在这场里问过的其他问题（调用方按索引从库里取回来）
-def _too_repetitive(text: str, target_question: str, own_questions: list = None) -> bool:
+# 接话去重的判据：本地向量余弦，线取 0.80（app/ai/utils/embed_util.py）
+#
+# 为什么不用字面相似度：8 场评审会、26 条真实接话里，字面 Jaccard >= 0.7 一条都挡不住
+#   （最高只有 0.593）。"换个说法把同一个问题再问一遍"它根本认不出来 —— 标定数据见
+#   scripts/calibrate_dedup.py 与 data/_dedup_calibration.txt
+# 为什么是 0.80 而不是 0.70：0.70 在真数据上会挡掉 18/26，其中 #202(0.856)、#221(0.767)、
+#   #199(0.779) 是"不同评审从各自角度追问同一主题"，那正是交叉质询的设计意图，不该当冷饭
+# 为什么比全场之前问过的每一句：只比"对方原话 + 自己问过的"会漏掉 #176 ——
+#   它把别的议题里的"每月调用量预计多少次"逐字复述了一遍（字面 1.000），
+#   而那句既不是它接的话，也不是它自己问的。放宽到全场，0.80 挡掉 13/26
+DEDUP_COS = 0.80
+# 向量模型不可用时的兜底：退回字面相似度（弱得多，但总比完全不判好）
+DEDUP_BIGRAM = 0.7
+
+
+# 这句接话是不是在炒冷饭。是的话返回被重复的那一句，不是则返回空串。
+# 返回原句而不是 True/False，是为了让重试时能把它念给模型听 ——
+# "你重复了自己之前问过的「……」，换一个角度"比"你重复了"有用得多（实测有效）
+async def _repeated_question(text: str, session_id: str) -> str:
     if not text:
-        return False
-    if target_question and similarity(text, target_question) >= 0.7:
-        return True
-    for question in (own_questions or []):
-        if question and similarity(text, question) >= 0.7:
-            return True
-    return False
+        return ""
+    rows = await store.all_rows(session_id)
+    others = [r.get("question", "") for r in rows if (r.get("question") or "").strip()]
+    if not others:
+        return ""
+
+    if embed_util.available():
+        vectors = await embed_util.aencode([text] + others)
+        if vectors is not None:
+            hits = [embed_util.cosine(vectors[0], v) for v in vectors[1:]]
+            best = int(np.argmax(hits))
+            return others[best] if hits[best] >= DEDUP_COS else ""
+
+    # 兜底路径：字面相似度。逐句算，挑最高的那句
+    worst, top = "", 0.0
+    for question in others:
+        score = similarity(text, question)
+        if score >= DEDUP_BIGRAM and score > top:
+            worst, top = question, score
+    return worst
 
 
 # 图节点：判定 + 接话发言
@@ -171,24 +202,24 @@ async def cross_node(state: ReviewState):
     except Exception as e:
         print(f"-----------接话发言失败：{e}------------")
 
-    # 质量兜底：接话不能是炒冷饭。抄对方原话等于没接，重复自己之前问过的更难看
-    # （本地模型实测两个毛病都会犯）重试一次，还是不行就放弃这次接话
+    # 质量兜底：接话不能是炒冷饭 —— 抄对方原话等于没接，重复自己之前问过的更难看，
+    # 把别的评审问过的问题再问一遍同样是白说。重试一次，还是不行就放弃这次接话
     who = REVIEWER_NAMES.get(role, role)
-    # 我自己在这场里问过的其他问题，按索引去库里取
-    own_questions = [r.get("question", "") for r in await store.rows_of_role(index, role)]
-    if _too_repetitive(text, target_question, own_questions):
+    session_id = state.get("session_id") or ""
+    repeated = await _repeated_question(text, session_id)
+    if repeated:
         print(f"-----------{who}接话在炒冷饭，重试一次：{text[:40]}------------")
         try:
             rs = await agent.ainvoke({"messages": [HumanMessage(content=(
                 user_msg["messages"][0].content
-                + "\n\n注意：你上一次的回答要么重复了对方的话，要么重复了你自己之前问过的问题。"
-                  "这次必须针对对方那句话里的一个具体点，换一个角度发问。"
+                + f"\n\n注意：你上一次的回答和这场评审会里已经问过的这句话几乎一样：\n「{repeated}」\n"
+                  "这次必须针对对方那句话里的一个具体点，换一个角度发问，不能再和它重复。"
             ))]})
             retry_msgs = rs.get("messages") or []
             text = first_question(str(retry_msgs[-1].content or "")) if retry_msgs else ""
         except Exception as e:
             print(f"-----------{who}接话重试失败：{e}------------")
-        if _too_repetitive(text, target_question, own_questions):
+        if await _repeated_question(text, session_id):
             print(f"-----------{who}接话仍在炒冷饭，本次放弃接话------------")
             return {"cross_checked": True}
 

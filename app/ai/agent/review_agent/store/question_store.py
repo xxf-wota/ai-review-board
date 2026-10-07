@@ -226,11 +226,6 @@ async def rows_of(entries: list) -> list:
     return await asyncio.to_thread(review_dao.get_questions_by_ids, ids)
 
 
-async def rows_of_role(index: list, role: str) -> list:
-    """取某位评审在这场里问过的正文（接话查"是不是在炒自己的冷饭"要用）"""
-    return await rows_of([e for e in (index or []) if e.get("speaker_role") == role])
-
-
 async def question_of(entry: dict) -> str:
     """取某一条的问题原文。没落过库（id=0）时退回索引里那份"""
     if not entry:
