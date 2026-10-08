@@ -22,6 +22,26 @@ from app.web.websocket_router.websocket_router import wb_router
 load_dotenv()
 DB_URI = os.getenv("POSTGRESQL_URL")
 
+
+# httpx 建客户端时会拿 NO_PROXY 里的每一项去构造 URLPattern。像 `[::1]` 这种带方括号的写法，
+# 会被它拆成"主机名 `[` + 端口 `:1]`"，直接抛 httpx.InvalidURL: Invalid port: ':1]' ——
+# 于是**所有**模型客户端都建不出来：本地模型失败、商业模型也跟着失败，评审会看起来照常能开，
+# 但要素表是兜底造的、四位评审一句话都没真说过。实测这个写法来自机器上的代理环境变量，
+# 所以启动时先规整掉，并且明确说出剔了什么（静默降级比报错难查得多）。
+def _clean_no_proxy():
+    for key in ("NO_PROXY", "no_proxy"):
+        raw = os.environ.get(key)
+        if not raw:
+            continue
+        parts = [p.strip() for p in raw.split(",") if p.strip()]
+        keep = [p for p in parts if "[" not in p and "]" not in p]
+        if len(keep) != len(parts):
+            os.environ[key] = ",".join(keep)
+            print(f"{key} 里有 httpx 解析不了的写法，已剔除：{sorted(set(parts) - set(keep))}")
+
+
+_clean_no_proxy()
+
 # psycopg 的异步模式跑不了 Windows 默认的 ProactorEventLoop，必须换成 Selector。
 # 这一句管的是"别人帮我们建 loop"的场景（TestClient、脚本里的 asyncio.run）；
 # uvicorn 从 0.36 起不再读事件循环策略，它自己挑 loop_factory，所以在下面的 __main__ 里还要单独指定一次
