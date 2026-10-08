@@ -1,364 +1,537 @@
-<mxfile host="app.diagrams.net" pages="4">
-  <diagram name="1. 节点拓扑" id="5RyenQdLKw1fYAtNCRio">
-    <mxGraphModel dx="585" dy="781" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="826" math="0" shadow="0">
+<mxfile host="app.diagrams.net" pages="9">
+  <diagram name="1. 系统总览" id="page-1">
+    <mxGraphModel dx="900" dy="700" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="826" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-        <mxCell id="n_start" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" value="START" vertex="1">
-          <mxGeometry height="40" width="90" x="30" y="285" as="geometry" />
+        <mxCell id="p1b1" value="① 系统总览：一次评审会的全链路" style="text;html=1;strokeColor=none;fillColor=none;fontSize=18;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="30" y="10" width="900" height="30" as="geometry" />
         </mxCell>
-        <mxCell id="n_mgr" parent="1" style="hexagon;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;fontSize=13;" value="manager&#xa;调度中枢" vertex="1">
-          <mxGeometry height="80" width="200" x="390" y="265" as="geometry" />
+        <mxCell id="p1b2" value="浏览器（Vue2 单页，无构建）app/html/app.html&#xa;· 左侧按钮切换两个智能体：模拟面试 / 交叉质询评审团&#xa;· 评审会界面：评审气泡、⟶ 接话箭头、答题框、纪要 + 未答好清单" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="30" y="60" width="430" height="90" as="geometry" />
         </mxCell>
-        <mxCell id="n_ext" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="extract&#xa;方案要素抽取" vertex="1">
-          <mxGeometry height="56" width="180" x="60" y="60" as="geometry" />
+        <mxCell id="p1b3" value="login.html：邮箱 + 验证码（真发信 SMTP）&#xa;登录即建业务会话（user_id = email）&#xa;登录态存 sessionStorage" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="480" y="60" width="330" height="90" as="geometry" />
         </mxCell>
-        <mxCell id="n_spk" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="speaker&#xa;评审发言（主问题 / 追问）" vertex="1">
-          <mxGeometry height="56" width="220" x="380" y="60" as="geometry" />
+        <mxCell id="p1b4" value="FastAPI · app/web/review_router&#xa;POST /review/upload（Word / PDF / txt → 纯文本）&#xa;POST /review/submit（抽要素表 + 落库）   GET /review/session/{id}（读回纪要 + 未答好清单）&#xa;POST /review/meeting/start（SSE 开场）   POST /review/meeting/answer（SSE 交回答，skip=true 可跳过）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="30" y="190" width="780" height="110" as="geometry" />
         </mxCell>
-        <mxCell id="n_crs" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="cross&#xa;接话判定 + 接话发言" vertex="1">
-          <mxGeometry height="56" width="220" x="620" y="60" as="geometry" />
+        <mxCell id="p1b5" value="LangGraph ReviewGraph（与模拟面试图共用同一个 PostgreSQL 检查点，靠 thread_id 区分）&#xa;manager（同步调度中枢，Command(goto=…) 动态跳转）· extract · speaker · cross · judge" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="30" y="340" width="780" height="80" as="geometry" />
         </mxCell>
-        <mxCell id="n_jdg" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="judge&#xa;回答判定" vertex="1">
-          <mxGeometry height="56" width="180" x="900" y="60" as="geometry" />
+        <mxCell id="p1b6" value="本地模型（优先）&#xa;Ollama qwen2.5:7b" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="30" y="460" width="250" height="80" as="geometry" />
         </mxCell>
-        <mxCell id="n_end" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" value="END" vertex="1">
-          <mxGeometry height="40" width="120" x="1000" y="285" as="geometry" />
+        <mxCell id="p1b7" value="商业模型（失败降级）&#xa;DashScope qwen3.7-flash" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="300" y="460" width="250" height="80" as="geometry" />
         </mxCell>
-        <mxCell id="n_note" parent="1" style="text;html=1;align=left;verticalAlign=top;fontSize=12;strokeColor=none;fillColor=none;" value="manager 用 Command(goto=...) 动态跳转，&#xa;不是静态 conditional edge ——&#xa;所以 LangGraph 自带的&#xa;draw_mermaid() 画不出这些分支。" vertex="1">
-          <mxGeometry height="90" width="300" x="60" y="400" as="geometry" />
+        <mxCell id="p1b8" value="本地 ONNX 向量模型&#xa;接话去重（余弦 0.80）&#xa;384 维 / 7 ms 一句" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="570" y="460" width="240" height="80" as="geometry" />
         </mxCell>
-        <mxCell id="e0" edge="1" parent="1" source="n_start" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="n_mgr" value="">
+        <mxCell id="p1b9" value="PostgreSQL&#xa;图检查点&#xa;(AsyncPostgresSaver)&#xa;+ 摘要记忆" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="30" y="600" width="240" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="p1b10" value="MySQL&#xa;review_session（8 字段）&#xa;review_question（13 字段）" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="290" y="600" width="250" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="p1b11" value="Redis&#xa;会话 / 窗口记忆 / 画像&#xa;/ 会话锁" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="560" y="600" width="240" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="p1b12" value="Chroma&#xa;长期记忆&#xa;（模拟面试用；评审会不用）" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="820" y="600" width="240" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="p1b13" value="为什么要这么分&#xa;&#xa;· 评审会只活在一场会议里&#xa;  → 不需要四层记忆，只需要&#xa;    检查点（把会议接到下一次请求）&#xa;&#xa;· 状态里不放问答正文&#xa;  → 只留索引（id + 判定结果），&#xa;    正文写 MySQL，按 id 现取&#xa;&#xa;· 模型本地优先、商业降级&#xa;  → 演示走商业模型更稳；&#xa;    本地 qwen2.5:7b 也能整场跑通" style="text;html=1;strokeColor=none;fillColor=none;fontSize=12;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="840" y="60" width="300" height="380" as="geometry" />
+        </mxCell>
+        <mxCell id="p1e14" value="登录后进单页" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;dashed=1;" edge="1" parent="1" source="p1b3" target="p1b2">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e1" edge="1" parent="1" source="n_mgr" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;exitX=0.1;exitY=0;exitDx=0;exitDy=0;entryX=0.4;entryY=1;entryDx=0;entryDy=0;" target="n_ext" value="1 没有要素表">
+        <mxCell id="p1e15" value="HTTP / SSE" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p1b2" target="p1b4">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e2" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;exitX=0.437;exitY=-0.009;exitDx=0;exitDy=0;entryX=0.443;entryY=0.956;entryDx=0;entryDy=0;entryPerimeter=0;exitPerimeter=0;" value="2 phase=main / followup">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="477.46" y="190" />
-              <mxPoint x="477.46" y="190" />
-            </Array>
-            <mxPoint x="477.4" y="264.98999999999995" as="sourcePoint" />
-            <mxPoint x="477.46000000000004" y="114.24599999999994" as="targetPoint" />
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="e3" edge="1" parent="1" source="n_mgr" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;exitX=0.7;exitY=0;exitDx=0;exitDy=0;entryX=0.4;entryY=1;entryDx=0;entryDy=0;" target="n_crs" value="6 phase=cross 且还有额度">
+        <mxCell id="p1e16" value="驱动图" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p1b4" target="p1b5">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e4" edge="1" parent="1" source="n_mgr" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;exitX=0.95;exitY=0;exitDx=0;exitDy=0;entryX=0.4;entryY=1;entryDx=0;entryDy=0;" target="n_jdg" value="7 phase=judge">
+        <mxCell id="p1e17" value="调用（本地优先）" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;dashed=1;" edge="1" parent="1" source="p1b5" target="p1b6">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e5" edge="1" parent="1" source="n_ext" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#999999;dashed=1;exitX=0.8;exitY=1;exitDx=0;exitDy=0;entryX=0.05;entryY=0;entryDx=0;entryDy=0;" target="n_mgr" value="每个节点干完都回中枢">
+        <mxCell id="p1e18" value="降级" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;dashed=1;" edge="1" parent="1" source="p1b5" target="p1b7">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e6" edge="1" parent="1" source="n_spk" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#999999;dashed=1;exitX=0.361;exitY=1.068;exitDx=0;exitDy=0;entryX=0.35;entryY=0;entryDx=0;entryDy=0;exitPerimeter=0;" target="n_mgr" value="">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="459.41" y="116.06" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="e7" edge="1" parent="1" source="n_crs" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#999999;dashed=1;exitX=0.8;exitY=1;exitDx=0;exitDy=0;entryX=0.65;entryY=0;entryDx=0;entryDy=0;" target="n_mgr" value="">
+        <mxCell id="p1e19" value="接话去重打分" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;dashed=1;" edge="1" parent="1" source="p1b5" target="p1b8">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e8" edge="1" parent="1" source="n_jdg" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#999999;dashed=1;exitX=0.8;exitY=1;exitDx=0;exitDy=0;entryX=0.95;entryY=0;entryDx=0;entryDy=0;" target="n_mgr" value="">
+        <mxCell id="p1e20" value="每个超步写检查点" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;dashed=1;" edge="1" parent="1" source="p1b5" target="p1b9">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e9" edge="1" parent="1" source="n_mgr" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#b85450;strokeWidth=2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="n_end" value="3/4/5/8 → _await_pending&#xa;9 phase=await_answer&#xa;→ 停住等学生">
+        <mxCell id="p1e21" value="提交方案 / 读回纪要" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;dashed=1;" edge="1" parent="1" source="p1b4" target="p1b10">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="n_note2" parent="1" style="text;html=1;align=left;verticalAlign=top;fontSize=12;strokeColor=none;fillColor=none;" value="两种 END 含义不同：&#xa;· await_answer：图停住等学生回答，这次请求正常结束 → 前端弹答题框&#xa;· done：会议真的开完了 → 展示会议纪要和未答好清单" vertex="1">
-          <mxGeometry height="76" width="520" x="420" y="400" as="geometry" />
-        </mxCell>
-      </root>
-    </mxGraphModel>
-  </diagram>
-  <diagram name="2. 会议状态机" id="ZhK51gTQNjajn5qJt3Lm">
-    <mxGraphModel grid="1" page="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" pageScale="1" pageWidth="1169" pageHeight="826" math="0" shadow="0">
-      <root>
-        <mxCell id="0" />
-        <mxCell id="1" parent="0" />
-        <mxCell id="d1" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=none;" value="" vertex="1">
-          <mxGeometry height="24" width="24" x="70" y="58" as="geometry" />
-        </mxCell>
-        <mxCell id="d2" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=none;" value="" vertex="1">
-          <mxGeometry height="24" width="24" x="70" y="158" as="geometry" />
-        </mxCell>
-        <mxCell id="s_ext" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" value="extract" vertex="1">
-          <mxGeometry height="50" width="170" x="300" y="45" as="geometry" />
-        </mxCell>
-        <mxCell id="s_main" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" value="main" vertex="1">
-          <mxGeometry height="50" width="170" x="300" y="145" as="geometry" />
-        </mxCell>
-        <mxCell id="s_cross" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" value="cross" vertex="1">
-          <mxGeometry height="50" width="170" x="300" y="245" as="geometry" />
-        </mxCell>
-        <mxCell id="s_await" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" value="await_answer" vertex="1">
-          <mxGeometry height="50" width="170" x="300" y="365" as="geometry" />
-        </mxCell>
-        <mxCell id="s_judge" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" value="judge" vertex="1">
-          <mxGeometry height="50" width="170" x="300" y="465" as="geometry" />
-        </mxCell>
-        <mxCell id="s_adv" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" value="advance" vertex="1">
-          <mxGeometry height="50" width="170" x="300" y="565" as="geometry" />
-        </mxCell>
-        <mxCell id="s_fol" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" value="followup" vertex="1">
-          <mxGeometry height="50" width="170" x="640" y="565" as="geometry" />
-        </mxCell>
-        <mxCell id="s_done" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" value="done" vertex="1">
-          <mxGeometry height="50" width="170" x="640" y="145" as="geometry" />
-        </mxCell>
-        <mxCell id="s_note" parent="1" style="text;html=1;align=left;verticalAlign=top;fontSize=12;strokeColor=none;fillColor=none;" value="await_answer 不是「挂起」，是 goto=END。&#xa;LangGraph 没有挂起语义：图跑到 END 就结束，&#xa;状态存进检查点（PostgreSQL）；&#xa;学生答完带同一个 thread_id 重新 astream，&#xa;manager 看到 phase=judge 就知道该去判定了。" vertex="1">
-          <mxGeometry height="110" width="440" x="660" y="290" as="geometry" />
-        </mxCell>
-        <mxCell id="t1" edge="1" parent="1" source="d1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="s_ext" value="初始没传要素表">
+        <mxCell id="p1e22" value="边开会边写透质询记录" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;dashed=1;" edge="1" parent="1" source="p1b5" target="p1b10">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="t2" edge="1" parent="1" source="d2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="s_main" value="初始已传要素表">
+        <mxCell id="p1e23" value="会话 / 锁" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#999999;fontSize=11;dashed=1;" edge="1" parent="1" source="p1b5" target="p1b11">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="t3" edge="1" parent="1" source="s_ext" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="s_main" value="抽完要素表">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="240" y="70" />
-              <mxPoint x="240" y="170" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="t4" edge="1" parent="1" source="s_main" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="s_cross" value="主问题问完">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="240" y="170" />
-              <mxPoint x="240" y="270" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="t5" edge="1" parent="1" source="s_cross" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;exitX=1;exitY=0.3;exitDx=0;exitDy=0;entryX=1;entryY=0.7;entryDx=0;entryDy=0;" target="s_cross" value="有人接话（每议题最多 1 次）">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="560" y="260" />
-              <mxPoint x="560" y="280" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="t6" edge="1" parent="1" source="s_cross" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="s_await" value="接话环节结束">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="240" y="270" />
-              <mxPoint x="240" y="390" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="t7" edge="1" parent="1" source="s_await" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#b85450;strokeWidth=2;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="s_judge" value="学生提交回答&#xa;（带同一个 session_id 重新 astream）">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="240" y="390" />
-              <mxPoint x="240" y="490" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="t8" edge="1" parent="1" source="s_judge" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="s_adv" value="">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="240" y="490" />
-              <mxPoint x="240" y="590" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="t9" edge="1" parent="1" source="s_adv" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#999999;dashed=1;exitX=0.999;exitY=0.303;exitDx=0;exitDy=0;entryX=0.999;entryY=0.703;entryDx=0;entryDy=0;entryPerimeter=0;exitPerimeter=0;" target="s_await" value="本议题还有没判过的问题">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="880" y="580.19" />
-              <mxPoint x="880" y="400.19" />
-            </Array>
-            <mxPoint x="470" y="577.48" as="sourcePoint" />
-            <mxPoint x="470" y="402.48" as="targetPoint" />
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="t10" edge="1" parent="1" source="s_adv" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#b85450;strokeWidth=2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="s_fol" value="都答完了，有人没被说服，&#xa;且本议题还没追过">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="t11" edge="1" parent="1" source="s_fol" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="s_await" value="追问完">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="960" y="590" />
-              <mxPoint x="960" y="390" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="t12" edge="1" parent="1" source="s_adv" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#999999;dashed=1;exitX=0;exitY=0.2;exitDx=0;exitDy=0;entryX=0;entryY=0.8;entryDx=0;entryDy=0;" target="s_main" value="议题收尾，换下一位评审">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="180" y="575" />
-              <mxPoint x="180" y="185" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="t13" edge="1" parent="1" source="s_main" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="s_done" value="轮次用完，散会">
+        <mxCell id="p1e24" value="（评审模块不用）" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#cccccc;fontSize=11;dashed=1;" edge="1" parent="1" source="p1b5" target="p1b12">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>
   </diagram>
-  <diagram name="3. 判定后怎么走" id="_NUmaKVqVL1LwM-FacXi">
-    <mxGraphModel dx="1201" dy="782" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="826" math="0" shadow="0">
+  <diagram name="2. 节点拓扑与决策表" id="page-2">
+    <mxGraphModel dx="900" dy="700" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="826" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-        <mxCell id="r0" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" value="一次判定结束&#xa;（phase = advance）" vertex="1">
-          <mxGeometry height="60" width="190" x="60" y="170" as="geometry" />
+        <mxCell id="p2b1" value="② 节点拓扑与 manager 决策表（改调度只改这里）" style="text;html=1;strokeColor=none;fillColor=none;fontSize=18;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="30" y="10" width="900" height="30" as="geometry" />
         </mxCell>
-        <mxCell id="r1" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" value="本议题还有没判过的问题吗？" vertex="1">
-          <mxGeometry height="80" width="220" x="320" y="160" as="geometry" />
+        <mxCell id="p2b2" value="START" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="30" y="60" width="90" height="44" as="geometry" />
         </mxCell>
-        <mxCell id="r2" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" value="追问层数还没到上限&#xa;且本议题还没追过？" vertex="1">
-          <mxGeometry height="80" width="220" x="620" y="300" as="geometry" />
+        <mxCell id="p2b3" value="manager&#xa;调度中枢（同步、零 I/O）" style="hexagon;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="30" y="160" width="190" height="80" as="geometry" />
         </mxCell>
-        <mxCell id="r3" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" value="找得到这样一条吗：&#xa;判定非 resolved&#xa;且 followup_hint 非空" vertex="1">
-          <mxGeometry height="90" width="220" x="620" y="440" as="geometry" />
+        <mxCell id="p2b4" value="END（图停住）" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="30" y="320" width="190" height="48" as="geometry" />
         </mxCell>
-        <mxCell id="r4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="_await_pending&#xa;接着问下一条&#xa;（主问题、接话按提问顺序来）" vertex="1">
-          <mxGeometry height="80" width="220" x="320" y="40" as="geometry" />
+        <mxCell id="p2b5" value="extract　方案要素抽取&#xa;（只能模型抽不出来时给兜底要素表）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="420" y="60" width="300" height="56" as="geometry" />
         </mxCell>
-        <mxCell id="r5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="goto speaker&#xa;让这条的提问者追一层&#xa;meeting_phase = followup" vertex="1">
-          <mxGeometry height="90" width="220" x="920" y="440" as="geometry" />
+        <mxCell id="p2b6" value="speaker　评审发言&#xa;主问题 与 追问共用这一个节点" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="420" y="150" width="300" height="56" as="geometry" />
         </mxCell>
-        <mxCell id="r6" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="_next_speaker&#xa;换下一位评审" vertex="1">
-          <mxGeometry height="70" width="220" x="920" y="170" as="geometry" />
+        <mxCell id="p2b7" value="cross　接话判定 + 接话发言&#xa;（含炒冷饭去重）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="420" y="240" width="300" height="56" as="geometry" />
         </mxCell>
-        <mxCell id="q1" edge="1" parent="1" source="r0" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="r1" value="">
+        <mxCell id="p2b8" value="judge　回答判定&#xa;由该问题的提问者判" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="420" y="330" width="300" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="p2e9" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p2b2" target="p2b3">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="q2" edge="1" parent="1" source="r1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#b85450;strokeWidth=2;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" target="r4" value="有">
+        <mxCell id="p2e10" value="1 没有要素表" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p2b3" target="p2b5">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="q3" edge="1" parent="1" source="r1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="r2" value="没有">
+        <mxCell id="p2e11" value="2 phase = main / followup" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p2b3" target="p2b6">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="q4" edge="1" parent="1" source="r2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.75;entryDx=0;entryDy=0;" target="r6" value="否">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="860" y="340" />
-              <mxPoint x="860" y="222.5" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="q5" edge="1" parent="1" source="r2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="r3" value="是">
+        <mxCell id="p2e12" value="6 phase = cross 且还有额度" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p2b3" target="p2b7">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="q6" edge="1" parent="1" source="r3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="r6" value="找不到">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="880" y="485" />
-              <mxPoint x="880" y="205" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="q7" edge="1" parent="1" source="r3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#b85450;strokeWidth=2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="r5" value="找到">
+        <mxCell id="p2e13" value="7 phase = judge" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p2b3" target="p2b8">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="r_note" parent="1" style="text;html=1;align=left;verticalAlign=top;fontSize=12;strokeColor=none;fillColor=none;" value="判定节点只负责判定，不决定路由 ——&#xa;&quot;下一步去哪&quot;要看整个议题，单个判定决定不了。&#xa;所以这一步的判断全在 manager_node._route_after_judge 里。" vertex="1">
-          <mxGeometry height="90" width="380" x="60" y="300" as="geometry" />
+        <mxCell id="p2e14" value="3/4/5 → 停住等回答&#xa;8/9/10/11 → 散会 / 防跑飞" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;dashed=1;" edge="1" parent="1" source="p2b3" target="p2b4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2e15" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#999999;fontSize=11;dashed=1;" edge="1" parent="1" source="p2b5" target="p2b3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2e16" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#999999;fontSize=11;dashed=1;" edge="1" parent="1" source="p2b6" target="p2b3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2e17" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#999999;fontSize=11;dashed=1;" edge="1" parent="1" source="p2b7" target="p2b3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2e18" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#999999;fontSize=11;dashed=1;" edge="1" parent="1" source="p2b8" target="p2b3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2b19" value="manager 决策表（自上而下第一条命中生效）&#xa;&#xa;1  plan_elements 为空 → extract&#xa;2  phase ∈ {main, followup} → speaker&#xa;3  phase=cross 且 cross_checked → 停住等回答&#xa;4  phase=cross 且 cross_in_issue ≥ 1 → 停住&#xa;5  phase=cross 且 cross_total ≥ 6 → 停住&#xa;6  phase=cross（上面都不满足）→ cross&#xa;7  phase = judge → judge&#xa;8  phase = advance → _route_after_judge&#xa;9  phase = await_answer → END（防跑飞）&#xa;10 phase = done → END&#xa;11 其它阶段 → END + done（不让会议卡死）&#xa;&#xa;为什么画不出自动图：&#xa;manager 用 Command(goto=…) 动态跳转，&#xa;不是静态 conditional edge ——&#xa;LangGraph 自带的 draw_mermaid()&#xa;只会画出「节点全回中枢」，&#xa;分支一条都看不到，所以这张图是手画的。" style="text;html=1;strokeColor=none;fillColor=none;fontSize=11;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="760" y="60" width="380" height="700" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>
   </diagram>
-  <diagram name="4. 一次问答走位" id="u8wHRgDoDkcY9XKT2YUs">
-    <mxGraphModel grid="1" page="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" pageScale="1" pageWidth="1169" pageHeight="826" math="0" shadow="0">
+  <diagram name="3. meeting_phase 状态机" id="page-3">
+    <mxGraphModel dx="900" dy="700" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="826" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-        <mxCell id="st1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#666666;align=left;spacingLeft=10;" value="1.  speaker（main）：技术评审提主问题&#xa;question_log += {tech, main}；cross_checked = False" vertex="1">
-          <mxGeometry height="56" width="420" x="120" y="60" as="geometry" />
+        <mxCell id="p3b1" value="③ meeting_phase 状态机（会议怎么往前走）" style="text;html=1;strokeColor=none;fillColor=none;fontSize=18;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="30" y="10" width="900" height="30" as="geometry" />
         </mxCell>
-        <mxCell id="st2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#666666;align=left;spacingLeft=10;" value="2.  cross：成本评审接话&#xa;question_log += {cost, cross}；cross_in_issue = 1" vertex="1">
-          <mxGeometry height="56" width="420" x="120" y="138" as="geometry" />
+        <mxCell id="p3b2" value="extract" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="70" width="150" height="50" as="geometry" />
         </mxCell>
-        <mxCell id="st3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#666666;align=left;spacingLeft=10;" value="3.  manager：cross → await_answer&#xa;pending_* 指向第 1 条（技术评审的主问题）" vertex="1">
-          <mxGeometry height="56" width="420" x="120" y="216" as="geometry" />
+        <mxCell id="p3b3" value="main" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="240" y="70" width="150" height="50" as="geometry" />
         </mxCell>
-        <mxCell id="st4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#666666;align=left;spacingLeft=10;" value="4.  前端：答题框「请回答 技术评审 的质询（本议题第 1/2 问）」" vertex="1">
-          <mxGeometry height="56" width="420" x="120" y="294" as="geometry" />
+        <mxCell id="p3b4" value="cross" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="440" y="70" width="170" height="50" as="geometry" />
         </mxCell>
-        <mxCell id="st5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#666666;align=left;spacingLeft=10;" value="5.  /meeting/answer：校验 phase == await_answer&#xa;写入 student_answer → 重新 astream → phase = judge" vertex="1">
-          <mxGeometry height="56" width="420" x="120" y="372" as="geometry" />
+        <mxCell id="p3b5" value="await_answer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="680" y="70" width="190" height="50" as="geometry" />
         </mxCell>
-        <mxCell id="st6" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#666666;align=left;spacingLeft=10;" value="6.  judge：技术评审判 unresolved，severity 4，&#xa;followup_hint = &quot;按多少用户算的&quot; → 回填 question_log 第 1 条" vertex="1">
-          <mxGeometry height="56" width="420" x="120" y="450" as="geometry" />
+        <mxCell id="p3b6" value="judge" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="680" y="200" width="190" height="50" as="geometry" />
         </mxCell>
-        <mxCell id="st7" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#666666;align=left;spacingLeft=10;" value="7.  manager：advance → await_answer&#xa;本议题还有没判过的（成本评审的接话）" vertex="1">
-          <mxGeometry height="56" width="420" x="120" y="528" as="geometry" />
+        <mxCell id="p3b7" value="advance" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="440" y="200" width="170" height="50" as="geometry" />
         </mxCell>
-        <mxCell id="st8" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#666666;align=left;spacingLeft=10;" value="8.  前端：答题框「请回答 成本与进度评审 的质询（本议题第 2/2 问）」" vertex="1">
-          <mxGeometry height="56" width="420" x="120" y="606" as="geometry" />
+        <mxCell id="p3b8" value="followup" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="240" y="200" width="150" height="50" as="geometry" />
         </mxCell>
-        <mxCell id="st9" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#666666;align=left;spacingLeft=10;" value="9.  /meeting/answer → judge：成本评审判完自己那条" vertex="1">
-          <mxGeometry height="56" width="420" x="120" y="684" as="geometry" />
+        <mxCell id="p3b9" value="done" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="200" width="150" height="50" as="geometry" />
         </mxCell>
-        <mxCell id="st10" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#666666;align=left;spacingLeft=10;" value="10.  manager：advance → followup&#xa;技术评审那条 unresolved 且有 hint → current_speaker = tech" vertex="1">
-          <mxGeometry height="56" width="420" x="120" y="762" as="geometry" />
-        </mxCell>
-        <mxCell id="st11" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#666666;align=left;spacingLeft=10;" value="11.  speaker（followup）：技术评审追问&#xa;question_log += {tech, followup}" vertex="1">
-          <mxGeometry height="56" width="420" x="120" y="840" as="geometry" />
-        </mxCell>
-        <mxCell id="st12" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#666666;align=left;spacingLeft=10;" value="12.  /meeting/answer → judge：判追问那条" vertex="1">
-          <mxGeometry height="56" width="420" x="120" y="918" as="geometry" />
-        </mxCell>
-        <mxCell id="st13" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#666666;align=left;spacingLeft=10;" value="13.  manager：advance → _next_speaker&#xa;换成本评审，清空 _ISSUE_RESET 那 9 个字段" vertex="1">
-          <mxGeometry height="56" width="420" x="120" y="996" as="geometry" />
-        </mxCell>
-        <mxCell id="se1" edge="1" parent="1" source="st1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="st2" value="">
+        <mxCell id="p3e10" value="抽完要素表" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p3b2" target="p3b3">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="se2" edge="1" parent="1" source="st2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="st3" value="">
+        <mxCell id="p3e11" value="主问题问完" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p3b3" target="p3b4">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="se3" edge="1" parent="1" source="st3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="st4" value="">
+        <mxCell id="p3e12" value="接话环节结束" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p3b4" target="p3b5">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="se4" edge="1" parent="1" source="st4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="st5" value="">
+        <mxCell id="p3e13" value="学生交回答&#xa;（带同一 session_id 重新 astream）" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p3b5" target="p3b6">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="se5" edge="1" parent="1" source="st5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="st6" value="">
+        <mxCell id="p3e14" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p3b6" target="p3b7">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="se6" edge="1" parent="1" source="st6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="st7" value="">
+        <mxCell id="p3e15" value="本议题还有没判过的问题" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p3b7" target="p3b5">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="se7" edge="1" parent="1" source="st7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="st8" value="">
+        <mxCell id="p3e16" value="都答完了、有人没被说服&#xa;且本议题还没追过" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p3b7" target="p3b8">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="se8" edge="1" parent="1" source="st8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="st9" value="">
+        <mxCell id="p3e17" value="追问完" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p3b8" target="p3b5">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="se9" edge="1" parent="1" source="st9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="st10" value="">
+        <mxCell id="p3e18" value="议题收尾，换下一位评审" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p3b7" target="p3b3">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="se10" edge="1" parent="1" source="st10" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="st11" value="">
+        <mxCell id="p3e19" value="轮次用完，散会" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#b85450;fontSize=11;dashed=1;" edge="1" parent="1" source="p3b3" target="p3b9">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="se11" edge="1" parent="1" source="st11" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="st12" value="">
+        <mxCell id="p3b20" value="有人接话（每个议题最多 1 次）" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;exitX=1;exitY=0.2;entryX=1;entryY=0.8;" edge="1" parent="1" source="p3b4" target="p3b4">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="se12" edge="1" parent="1" source="st12" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="st13" value="">
+        <mxCell id="p3b21" value="两个容易讲错的点&#xa;&#xa;① await_answer 不是「挂起」：LangGraph 没有挂起语义。manager 在 await_answer 处 goto=END，这次 HTTP 请求就结束了，&#xa;   状态被写进 PostgreSQL 检查点；学生答完再发一次请求，带同一个 thread_id，图从 START 进 manager，&#xa;   看到 phase=judge 就知道该去判定 —— 和模拟面试续多轮是同一套路，所以进程重启也接得上。&#xa;&#xa;② 图会停在两种 END 上，含义完全不同：await_answer = 等学生回答（前端弹答题框）；done = 真的开完了（展示纪要 + 未答好清单）。" style="text;html=1;strokeColor=none;fillColor=none;fontSize=12;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="40" y="300" width="1080" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="p3b22" value="一个议题的完整生命周期&#xa;&#xa;main（某位评审提主问题）&#xa;  → cross（别的评审可以当场接话反驳，每个议题最多 1 次）&#xa;  → await_answer（停下等学生回答；本议题可能有好几条问题，按提问顺序一条条答）&#xa;  → judge（由**这条问题的提问者**判定：答清楚了 / 答得不全 / 没答）&#xa;  → advance（看整个议题决定下一步）&#xa;       · 还有没判过的问题 → 继续 await_answer&#xa;       · 都答完、有人没被说服且本议题还没追过 → followup（追问 1 层）&#xa;       · 否则 → 换下一位评审（清掉 _ISSUE_RESET 的 10 个议题字段）&#xa;  → 四位都问完 → done（散会）&#xa;&#xa;为什么同时只能答一条：屏幕上永远只有一个「待你回答」，&#xa;不会出现三个人一起问、学生不知道该答谁（这个坑是照着真实界面截图改的）。" style="text;html=1;strokeColor=none;fillColor=none;fontSize=12;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="40" y="440" width="1080" height="340" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram name="4. 一次完整问答走位" id="page-4">
+    <mxGraphModel dx="900" dy="700" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="826" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="p4b1" value="④ 一次完整问答的走位（同一个议题要 4 次 HTTP 请求）" style="text;html=1;strokeColor=none;fillColor=none;fontSize=18;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="30" y="10" width="900" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="p4b2" value="1  speaker（main）：技术评审提主问题&#xa;     question_index += 一条（落库拿到 id）；cross_checked = False" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="60" width="760" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="p4b3" value="2  cross：成本评审接话&#xa;     question_index += 一条（question_type = cross，带 target_speaker）；cross_in_issue = 1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="112" width="760" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="p4e4" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p4b2" target="p4b3">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="g1" parent="1" style="rounded=0;dashed=1;dashPattern=8 4;fillColor=none;strokeColor=#b85450;verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;fontSize=12;fontColor=#b85450;" value="请求 ①  POST /review/meeting/start" vertex="1">
-          <mxGeometry height="252" width="480" x="90" y="40" as="geometry" />
+        <mxCell id="p4b5" value="3  manager：cross → await_answer（本议题第一条没判过的是技术评审那问）   ← 请求 ① 结束" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="164" width="760" height="44" as="geometry" />
         </mxCell>
-        <mxCell id="g2" parent="1" style="rounded=0;dashed=1;dashPattern=8 4;fillColor=none;strokeColor=#b85450;verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;fontSize=12;fontColor=#b85450;" value="请求 ②  POST /review/meeting/answer" vertex="1">
-          <mxGeometry height="252" width="480" x="90" y="352" as="geometry" />
+        <mxCell id="p4e6" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p4b3" target="p4b5">
+          <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="g3" parent="1" style="rounded=0;dashed=1;dashPattern=8 4;fillColor=none;strokeColor=#b85450;verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;fontSize=12;fontColor=#b85450;" value="请求 ③  POST /review/meeting/answer" vertex="1">
-          <mxGeometry height="252" width="480" x="90" y="664" as="geometry" />
+        <mxCell id="p4b7" value="4  前端：弹答题框「请回答 技术评审 的质询（本议题第 1/2 问）」" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="216" width="760" height="44" as="geometry" />
         </mxCell>
-        <mxCell id="g4" parent="1" style="rounded=0;dashed=1;dashPattern=8 4;fillColor=none;strokeColor=#b85450;verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;fontSize=12;fontColor=#b85450;" value="请求 ④  POST /review/meeting/answer" vertex="1">
-          <mxGeometry height="174" width="480" x="90" y="898" as="geometry" />
+        <mxCell id="p4e8" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p4b5" target="p4b7">
+          <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="p4note" parent="1" style="text;html=1;align=left;verticalAlign=top;fontSize=12;strokeColor=none;fillColor=none;" value="同一个议题走完要 4 次 HTTP 请求。&#xa;每个虚线框是「图停下 → 学生答 → 图被唤醒」的一次往返；&#xa;绿色的两步（前端答题）夹在两次请求中间，所以留在框外。" vertex="1">
-          <mxGeometry height="110" width="450" x="620" y="60" as="geometry" />
+        <mxCell id="p4b9" value="5  POST /meeting/answer：校验检查点里确实是 await_answer，写 student_answer 重新 astream   ← 请求 ②" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="268" width="760" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="p4e10" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p4b7" target="p4b9">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p4b11" value="6  judge：技术评审判 unresolved、severity 4、followup_hint「按多少用户算的」&#xa;     判定回填索引 + 回答与评语写回 MySQL 那条 → phase = advance" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="320" width="760" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="p4e12" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p4b9" target="p4b11">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p4b13" value="7  manager：本议题还有没判过的（成本评审的接话）→ 停住等第 2 问   ← 请求 ② 结束" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="372" width="760" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="p4e14" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p4b11" target="p4b13">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p4b15" value="8  前端：答题框「请回答 成本与进度评审 的质询（本议题第 2/2 问）」" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="424" width="760" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="p4e16" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p4b13" target="p4b15">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p4b17" value="9  POST /meeting/answer → judge：成本评审判完自己那条   ← 请求 ③" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="476" width="760" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="p4e18" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p4b15" target="p4b17">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p4b19" value="10 manager：都答完了、技术评审那条 unresolved 且有 hint → phase = followup，current_speaker = tech" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="528" width="760" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="p4e20" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p4b17" target="p4b19">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p4b21" value="11 speaker（followup）：技术评审追问（按索引取回本议题问答 + followup_hint）   ← 请求 ③ 结束" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="580" width="760" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="p4e22" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p4b19" target="p4b21">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p4b23" value="12 POST /meeting/answer → judge：判追问那条   ← 请求 ④" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="632" width="760" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="p4e24" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p4b21" target="p4b23">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p4b25" value="13 manager：本议题已追过 → _next_speaker（换成本评审，清 10 个议题字段）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="684" width="760" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="p4e26" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p4b23" target="p4b25">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p4b27" value="讲这段时强调什么&#xa;&#xa;· 同一个议题 4 次 HTTP 请求，&#xa;  中间隔着学生在页面上的输入&#xa;&#xa;· 每次请求都从 START 进 manager，&#xa;  靠检查点里的 meeting_phase&#xa;  决定该干哪一步&#xa;&#xa;· 一个议题里可能好几位评审都&#xa;  问了话，学生按提问顺序&#xa;  一条条答，每条由那条问题的&#xa;  提问者判 —— 谁的疑问谁负责&#xa;&#xa;· 界面上永远只有一个待答问题&#xa;&#xa;· 接话那条也要求学生回答，&#xa;  否则「接话问了没人判」，&#xa;  进不了未答好清单（踩过）" style="text;html=1;strokeColor=none;fillColor=none;fontSize=11;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="830" y="60" width="310" height="700" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram name="5. 判定后怎么走" id="page-5">
+    <mxGraphModel dx="900" dy="700" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="826" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="p5b1" value="⑤ 判定之后怎么走（_route_after_judge）" style="text;html=1;strokeColor=none;fillColor=none;fontSize=18;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="30" y="10" width="900" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="p5b2" value="一次判定结束（phase = advance）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="60" width="320" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="p5b3" value="本议题还有&#xa;没判过的问题吗？" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="140" width="320" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="p5b4" value="_await_pending：接着问下一条&#xa;主问题、接话按提问顺序来" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="440" y="150" width="400" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="p5b5" value="followup_depth &lt; 1&#xa;且本议题还没追过？" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="260" width="320" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="p5b6" value="_next_speaker：换下一位评审&#xa;本轮没了就下一轮，轮次用完散会" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="440" y="275" width="400" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="p5b7" value="找得到这样一条吗：&#xa;判定非 resolved&#xa;且 followup_hint 非空？" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="400" width="320" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="p5b8" value="goto speaker：由它的提问者追一层&#xa;phase = followup，followup_depth = 1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="440" y="420" width="400" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="p5e9" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p5b2" target="p5b3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p5e10" value="有" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p5b3" target="p5b4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p5e11" value="没有" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p5b3" target="p5b5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p5e12" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p5b5" target="p5b6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p5e13" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p5b5" target="p5b7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p5e14" value="找不到" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p5b7" target="p5b6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p5e15" value="找到" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p5b7" target="p5b8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p5b16" value="_await_pending（决定学生现在答哪一条）&#xa;    本议题（最后一条主问题往后那段）里，第一条还没判过的问题：&#xa;        pending_question = 它的题干；pending_type = 它的类型；pending_from = 它的提问者；pending_id = 库里那条记录的 id&#xa;        meeting_phase = await_answer，goto=END&#xa;    兜底：一条都没找到（理论上不可能）→ 直接换下一位，不让会议卡住。&#xa;&#xa;_next_speaker（换人 / 换轮 / 散会）&#xa;    speaker_index + 1 &lt; len(speaker_order) → 换下一位，phase = main&#xa;    本轮说完且 round &lt; max_round        → round += 1，回到第一位&#xa;    都不满足                            → END，phase = done&#xa;    换人 / 换轮时把 _ISSUE_RESET 的 10 个字段一起清（漏一个就会出现「新问题沿用上一题的标记」）。" style="text;html=1;strokeColor=none;fillColor=none;fontSize=12;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="40" y="540" width="1080" height="240" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram name="6. 状态与落库" id="page-6">
+    <mxGraphModel dx="900" dy="700" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="826" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="p6b1" value="⑥ 状态只留索引，正文放 MySQL（检查点体积降一个数量级）" style="text;html=1;strokeColor=none;fillColor=none;fontSize=18;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="30" y="10" width="900" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="p6b2" value="ReviewState（图的状态 = 检查点里那一份）&#xa;&#xa;方案：plan_text（抽完要素即清空）、plan_elements&#xa;会话：session_id&#xa;会议控制：meeting_phase、round、max_round、&#xa;        speaker_order、speaker_index、current_speaker&#xa;当前议题：pending_question、pending_type、&#xa;        pending_from、pending_id、followup_depth、&#xa;        followup_hint、student_answer&#xa;防跑偏：cross_in_issue、cross_total、spoke_in_issue、&#xa;      cross_checked、max_cross_per_issue、max_cross_total&#xa;产出：question_index（全场问答的索引）&#xa;&#xa;已删除的字段：messages / question_log /&#xa;unresolved / minutes / diagnosis" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="30" y="60" width="330" height="430" as="geometry" />
+        </mxCell>
+        <mxCell id="p6b3" value="question_index 的每一条（索引）&#xa;&#xa;id                review_question 主键（对回正文的键）&#xa;round             第几轮&#xa;speaker_role      谁问的（tech/cost/compliance/user）&#xa;question_type     main / cross / followup&#xa;target_speaker    接话时被接的人&#xa;verdict           判定结果（resolved/partial/unresolved）&#xa;severity          1~5&#xa;followup_depth    追问层数&#xa;followup_hint     追问方向（manager 要读）&#xa;question          **只在这条还没答时留着**，判完即删&#xa;&#xa;为什么 question 只留一会儿：&#xa;manager 是同步节点、零 I/O，&#xa;_await_pending 要把题干填进 pending_question，&#xa;这一下不能查库。" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="390" y="60" width="330" height="430" as="geometry" />
+        </mxCell>
+        <mxCell id="p6b4" value="MySQL · review_question（13 字段）&#xa;&#xa;id, session_id, round, speaker_role, question_type,&#xa;target_speaker, question, student_answer, verdict,&#xa;verdict_comment, severity, followup_depth, created_at&#xa;&#xa;写入时机（边开会边写透）&#xa;· store.ask()          发言一抛出来就插一条，拿回 id&#xa;· store.save_verdict() 学生答完把回答/判定/评语写回那条&#xa;· 散会不再整批重写（重写会把 id 全换掉）&#xa;&#xa;取正文的入口（store/question_store.py，唯一出口）&#xa;· rows_of(entries)      按索引取一批（判定拼本议题、接话拼最近 6 条）&#xa;· question_of(entry)    取单条题干（接话要针对的那句）&#xa;· all_rows(session_id)  整场取回：散会纪要 + 接话查重&#xa;&#xa;实测收益（同一场真实会议，scripts/measure_review_tokens.py）&#xa;· 检查点累计写入 428 KB → 49.5 KB（8.7 倍）&#xa;· 状态不再随问答条数平方增长&#xa;· 提示词一字未改（动的是状态，不是提示词）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="750" y="60" width="390" height="430" as="geometry" />
+        </mxCell>
+        <mxCell id="p6e5" value="索引里的 id = 库里那条记录的主键&#xa;（取正文全靠它）" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;dashed=1;" edge="1" parent="1" source="p6b3" target="p6b4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p6e6" value="manager 只看索引&#xa;（每秒都跑，零 I/O）" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;dashed=1;" edge="1" parent="1" source="p6b2" target="p6b3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram name="7. 接话去重防线" id="page-7">
+    <mxGraphModel dx="900" dy="700" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="826" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="p7b1" value="⑦ 接话去重（炒冷饭防线）：向量余弦 0.80 + 整场比对" style="text;html=1;strokeColor=none;fillColor=none;fontSize=18;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="30" y="10" width="900" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="p7b2" value="cross 生成一句接话候选" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="60" width="300" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="p7b3" value="取整场之前问过的每一句&#xa;store.all_rows(session_id)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="140" width="300" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="p7b4" value="本地向量模型算余弦&#xa;embed_util（384 维 / 7 ms）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="230" width="300" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="p7b5" value="最高的那句 ≥ 0.80 ？" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="320" width="300" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="p7b6" value="重试一次&#xa;提示词里把被重复的那句原话念给模型听" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="420" y="230" width="340" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="p7b7" value="重试后仍 ≥ 0.80 ？" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="420" y="330" width="340" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="p7b8" value="放弃这次接话&#xa;（不落库，cross_checked = True 继续开会）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="420" y="440" width="340" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="p7b9" value="正常：落库 + 推 speaker_start/token/speaker_end" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="420" y="60" width="340" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="p7e10" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p7b2" target="p7b3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p7e11" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p7b3" target="p7b4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p7e12" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p7b4" target="p7b5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p7e13" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p7b5" target="p7b9">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p7e14" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p7b5" target="p7b6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p7e15" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p7b6" target="p7b7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p7e16" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p7b7" target="p7b8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p7e17" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p7b7" target="p7b9">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p7b18" value="为什么不用字面相似度&#xa;&#xa;拿 8 场真模型评审会、26 条真实接话量过：&#xa;· 字面 Jaccard ≥ 0.7 只挡住 1 条&#xa;  （26 条里字面分最高才 0.593 ——&#xa;   换个说法它完全认不出来）&#xa;· 只比「对方原话 + 自己问过的」&#xa;  会漏掉跨议题的逐字复述&#xa;  （那既不是接话对象、也不是自己问的）&#xa;· 换成余弦 + 整场比对：&#xa;    0.80 挡 13 条；0.70 挡 19 条，&#xa;    但会把 #202(0.856)/#221(0.767)/&#xa;    #199(0.779) 这类「不同评审从各自&#xa;    角度追问同一主题」误杀 ——&#xa;    那正是交叉质询要的效果&#xa;&#xa;· 兜底：向量模型不可用 → 退回字面&#xa;  DEDUP_BIGRAM = 0.7（只认逐字重复）&#xa;· 真模型实测：一场会里拦截两次，&#xa;  放弃了一条接话，会议照常往下走&#xa;&#xa;标定脚本 scripts/calibrate_dedup.py&#xa;自检脚本 scripts/check_dedup.py（17 项）" style="text;html=1;strokeColor=none;fillColor=none;fontSize=11;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="800" y="60" width="340" height="700" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram name="8. SSE 事件时序" id="page-8">
+    <mxGraphModel dx="900" dy="700" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="826" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="p8b1" value="⑧ SSE 事件时序（前端边收边渲染）" style="text;html=1;strokeColor=none;fillColor=none;fontSize=18;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="30" y="10" width="900" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="p8b2" value="meeting_start&#xa;session_id、max_round" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="60" width="700" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="p8b3" value="elements&#xa;要素表正文（前端渲染成卡片）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="132" width="700" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="p8e4" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p8b2" target="p8b3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p8b5" value="speaker_start → token × N → speaker_end&#xa;谁在说、逐字吐字、完整问题（接话时带 target/target_name → 画箭头）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="204" width="700" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="p8e6" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p8b3" target="p8b5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p8b7" value="verdict&#xa;role、name、question、verdict、severity、comment" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="276" width="700" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="p8e8" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p8b5" target="p8b7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p8b9" value="await_answer&#xa;role、name、question、question_type、question_index / issue_total" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="348" width="700" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="p8e10" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p8b7" target="p8b9">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p8b11" value="meeting_end&#xa;cross_total、question_log（整场记录，从库现取）、unresolved（未答好清单）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="420" width="700" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="p8e12" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p8b9" target="p8b11">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p8b13" value="done&#xa;每条流的收尾标记，前端据此关连接" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="492" width="700" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="p8e14" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=11;" edge="1" parent="1" source="p8b11" target="p8b13">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p8b15" value="讲这几个接口时要说的&#xa;&#xa;· 用 POST + SSE 而不是 EventSource：&#xa;  方案正文可能上万字，塞不进 URL，&#xa;  前端用 fetch + ReadableStream 读&#xa;&#xa;· 两个入口串起一场会：&#xa;  /meeting/start 开场，&#xa;  /meeting/answer 交回答&#xa;&#xa;· /meeting/answer 会先校验：&#xa;  检查点里 phase 必须是 await_answer&#xa;  （否则 404 / 409），&#xa;  不然乱填 session_id 会让图凭空&#xa;  从 START 开一场空会议&#xa;&#xa;· 散会时 router 只把会话状态改成&#xa;  finished —— 质询记录在开会过程中&#xa;  已经逐条写透了，不再整批重写&#xa;&#xa;· 落库失败只打日志、不往上抛：&#xa;  前端已经边收边渲染了，&#xa;  不能把已经开完的会毁掉" style="text;html=1;strokeColor=none;fillColor=none;fontSize=11;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="780" y="60" width="360" height="700" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram name="9. 关键数字与问答要点" id="page-9">
+    <mxGraphModel dx="900" dy="700" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="826" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="p9b1" value="⑨ 关键数字与面试问答要点" style="text;html=1;strokeColor=none;fillColor=none;fontSize=18;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="30" y="10" width="900" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="p9b2" value="状态与成本&#xa;· 检查点累计写入 428 KB → 49.5 KB（8.7 倍）&#xa;· 一场会约 18 次模型调用 / 25k 字提示词&#xa;· 一场会 7~9 问、4 次接话、1 次追问" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="30" y="60" width="350" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="p9b3" value="接话去重（8 场 26 条真实接话标定）&#xa;· 字面 Jaccard 0.7：只挡 1 条&#xa;· 向量余弦 0.80（整场比对）：挡 13 条&#xa;· 余弦 0.70：挡 19 条但误杀 3 条&#xa;· 重排序（备选，未启用）：1 条不漏" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="400" y="60" width="350" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="p9b4" value="防跑偏与质量&#xa;· 每议题最多接话 1 次（MAX_CROSS_PER_ISSUE）&#xa;· 全场最多接话 6 次（MAX_CROSS_TOTAL）&#xa;· 同议题已发言者不再接话&#xa;· 每议题最多追问 1 层（MAX_FOLLOWUP）&#xa;· 跳过 → 不追问（短路不调模型）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="770" y="60" width="370" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="p9b5" value="M1~M5（全部已验收）&#xa;M1 方案提交 + 要素抽取（8 字段 + 缺失项）&#xa;M2 四位评审（相似度最高 0.07、越界 0/4）&#xa;M3 交叉质询（5 请求 116 事件、配对 8/8）&#xa;M4 作答 + 追问（跳过 0 追问、封顶 1 层）&#xa;M5 纪要 + 未答好清单（7 条记录 / 4 条未答好）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="30" y="240" width="350" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="p9b6" value="验收脚本（都能变红）&#xa;· check_startup.py  16 项（真起服务，跑 8801）&#xa;· check_page.py     17 项（页面不变式）&#xa;· check_review_index.py 29 项（离线索引化）&#xa;· check_dedup.py    17 项（去重，--reverse 反向验）&#xa;· dry_run_demo.py   真模型预跑（--expect-cross）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="400" y="240" width="350" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="p9b7" value="模型选型&#xa;· 本地固定 qwen2.5:7b&#xa;  （qwen3.5:9b 抽要素 313.8 秒，&#xa;   且不认 response_format，会静默失败）&#xa;· 正式演示走商业 qwen3.7-flash&#xa;· 向量模型走本地 ONNX（不占显存、不装 torch）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="770" y="240" width="370" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="p9b8" value="被问到这些时的答法&#xa;&#xa;问：为什么评审会不用四层记忆？&#xa;答：一场评审会一次性结束，不需要跨会话记住谁；它需要的是「别忘了刚才说到哪」，那是检查点的事。&#xa;    把学生的长期画像喂进来反而会干扰判定（评审该按方案本身判）。所以是「一套记忆基础设施、两种用法」。&#xa;&#xa;问：四个 AI 会不会说一样的话、或者变成无限互怼？&#xa;答：两件事都有硬约束。视角不重复靠写死且互斥的关注点清单（实测两两相似度最高 0.07）；&#xa;    互怼有三道额度锁 + 追问封顶 1 层 + 接话语义去重（余弦 0.80，判定标准是拿 8 场真数据量出来的）。&#xa;&#xa;问：为什么判定不给总分？&#xa;答：一句话里塞三个问题是判不出「答没答到点上」的，所以我们只保留第一个问句、逐问题判定（答了 / 答偏了 / 没答），&#xa;    分数只作参考维度。最终产出是「未答好的问题清单」，学生能当改稿工单用。&#xa;&#xa;问：这套东西的局限？&#xa;答：① 接话内容质量随模型能力波动（机制、额度、箭头全部可复现，内容是概率性的）；&#xa;    ② 评审会的 session_id 没有归属校验（面试那半有）；③ 画像与评估两处只走商业模型，没有本地兜底。&#xa;    这三条都写进 README 的已知事项了 —— 宁可自己先说。" style="text;html=1;strokeColor=none;fillColor=none;fontSize=12;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="30" y="420" width="1110" height="360" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>
