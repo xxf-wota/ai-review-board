@@ -60,6 +60,36 @@ def get_session(session_id: str):
         conn.close()
 
 
+# 按学生列出他开过的评审会，最近创建的在前。
+# student_id 从提交方案那一刻就写进去了，但之前只写不读 —— 前端的历史侧栏
+# 存在浏览器 localStorage 里，换台机器、清一次缓存，自己开过的会就看不见了。
+# 这里把这一列用起来，让历史跟着账号走
+def list_sessions(student_id: str, limit: int = 50) -> list:
+    if not student_id:
+        return []
+    conn = get_mysql_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "select session_id, plan_title, status, round, created_at "
+            "from review_session where student_id=%s "
+            "order by created_at desc, session_id desc limit %s",
+            (student_id, int(limit)),
+        )
+        return [
+            {
+                "session_id": row[0],
+                "plan_title": row[1] or "",
+                "status": row[2] or "",
+                "round": row[3] or 0,
+                "created_at": str(row[4]),
+            }
+            for row in cur.fetchall()
+        ]
+    finally:
+        conn.close()
+
+
 # 整批写入质询记录（会议纪要的数据源）
 # 先按 session_id 删旧的再插：同一场会重开一次，记录应该是"替换"而不是"叠加"。
 # 顺带这个函数就自带了幂等性，重跑验收脚本不会越积越多

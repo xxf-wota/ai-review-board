@@ -12,6 +12,7 @@ from app.ai.tool.review_dao import (
     finish_session,
     get_questions,
     get_session,
+    list_sessions,
     save_session,
 )
 
@@ -93,6 +94,18 @@ async def submit_plan(payload: dict = Body(...)):
         "plan_elements": elements,
         "elements_text": format_elements(elements),
     }
+
+
+# 列出某个学生开过的评审会（历史侧栏的数据源）。
+# 走的是 review_session.student_id，这一列在提交方案时就写好了 ——
+# 之前只写不读，前端历史靠浏览器 localStorage，换设备就断了
+@review_router.get("/sessions")
+async def list_my_sessions(student_id: str = "", limit: int = 50):
+    student_id = (student_id or "").strip()
+    if not student_id:
+        raise HTTPException(status_code=400, detail="缺少 student_id，不知道要列谁的评审会")
+    rows = list_sessions(student_id, limit)
+    return {"student_id": student_id, "count": len(rows), "sessions": rows}
 
 
 # 读回一次评审会：基本信息 + 会议纪要（质询记录时间线）+ 未答好的问题清单

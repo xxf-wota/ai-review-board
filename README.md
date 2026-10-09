@@ -154,7 +154,10 @@ python -m app.main
 > 页面是 ChatGPT 那种布局：左边一条窄侧栏（切智能体 + 历史记录），右边居中的消息流，
 > 底部圆角输入框。历史记录存在浏览器 `localStorage` 里 —— 后端本来就按 `session_id`
 > 记得上下文，所以刷新、关掉重开都能接回上一场；评审会开完的记录还能从库里读回来只读回看。
-> **清掉浏览器数据 = 清掉侧栏列表**，但库里的评审记录和 Redis 里的会话记忆都还在。
+> 评审会这侧现在有**第二份历史**：提交方案时把登录账号写进 `review_session.student_id`，
+> 加载页面时再按账号调 `GET /review/sessions` 把后端那份并进侧栏（只在后端有的那几条，
+> 点开是只读回看）。所以**清掉浏览器数据不再等于清掉侧栏**：本地那份没了，自己开过的评审会
+> 还能从账号下面拉回来 —— 但**改动之前提交的会拉不回来**（那时 `student_id` 没写，见「已知事项」）。
 >
 > 侧栏每条记录右边有个 ✕（鼠标移上去才显形），点了会问一次再删。删的不是"侧栏那一行"：
 > 这一场会话留在 Redis（会话记录／窗口记忆／会话锁）、PostgreSQL（摘要／图的检查点）、
@@ -164,7 +167,8 @@ python -m app.main
 >
 > 评审会的**图结构、每个节点读什么状态写什么状态、分支条件、改哪里** →
 > [`docs/评审团流程图与状态说明.md`](docs/评审团流程图与状态说明.md)（Mermaid，可直接编辑）
-> ／ [`docs/评审团流程图.drawio`](docs/评审团流程图.drawio)（同内容的 draw.io 版，4 页，能拖拽改）
+> ／ [`docs/评审团流程图.drawio`](docs/评审团流程图.drawio)（同内容的 draw.io 版，面试用的 9 页，
+> 能拖拽改 —— 但它由 `scripts/make_review_flow_drawio.py` 生成，重跑会覆盖手拖改动）
 
 > 注意：不要用 `python app/main.py`。那样 `sys.path` 会变成 `app/` 目录，
 > `import app.xxx` 会失败。`main.py` 里的静态目录是相对项目根的 `app/html`，
@@ -201,7 +205,8 @@ python -m app.main
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | POST | `/review/upload` | 上传 Word / PDF / txt，解析成纯文本（支持 multipart） |
-| POST | `/review/submit` | 提交方案文本，抽取要素表并落库 |
+| POST | `/review/submit` | 提交方案文本，抽取要素表并落库（`student_id` 传登录账号就记下"这场会是谁开的"） |
+| GET | `/review/sessions?student_id=` | 按账号列出他开过的评审会，最近创建的在前（历史侧栏的数据源）；**缺 `student_id` 返 400** |
 | POST | `/review/meeting/start` | **开评审会，SSE 推全过程**（结构化事件，带"谁接了谁的话"）；推到第一位评审提问就停 |
 | POST | `/review/meeting/answer` | **学生交回答**，同一个 SSE；把会议从检查点唤醒，接着开到下一个提问或散会（`skip=true` 表示跳过） |
 | GET | `/review/session/{session_id}` | 读回一次评审会：基本信息 + **会议纪要（质询记录时间线）** + **未答好的问题清单** |
@@ -316,7 +321,8 @@ python scripts/dry_run_demo.py --strategy demo --expect-cross --expect-followup 
   问题原文、学生回答、判定评语写在 MySQL 的 `review_question` 里，谁要用谁按 `id` 取 ——
   检查点体积因此降了一个数量级（同一场真实会议 428 KB → 50 KB），而且不随记录数平方增长。
   模拟面试的四层记忆（窗口 / 摘要 / 长期 / 画像）另有实现，评审模块**不用**它 —— 理由见方案第六之一节。
-- **删除会话的归属校验只有面试那一半拦得住**：面试会话在 Redis 里有 `user_id`，删的时候能对一下；评审会的 `session_id` 是裸 hex、从来不进 Redis，`review_session.student_id` 目前也是空串，所以删评审会时没有归属信息可查（按幂等删除处理）。要补的话得在提交方案时把登录的 `user_id` 一起写进 `review_session`。
+- **删除会话的归属校验只有面试那一半拦得住**：面试会话在 Redis 里有 `user_id`，删的时候能对一下；评审会的 `session_id` 是裸 hex、从来不进 Redis，所以删评审会按幂等删除处理。不过**归属信息现在已经落库了**：提交方案时会把登录账号写进 `review_session.student_id`（侧栏那份历史就是按它拉的），删除接口还没拿它做校验 —— 这是下一步。
+- **按账号拉的那份历史只覆盖改动之后新提交的评审会**：`review_session.student_id` 是这次才开始写的，此前提交的会这一列全是空串（本次核对：29 行、非空 0 行），所以 `GET /review/sessions` 对老会话返回空 —— 老的那些仍然只在开过它的那个浏览器的 `localStorage` 里，换设备就看不到。
 - 页面通过 CDN 加载 Vue，**断网会白屏**；现场演示前建议先把依赖本地化。
 - **本机若设了代理环境变量，注意 `NO_PROXY` 里别写 `[::1]` 这种带方括号的写法**：
   httpx 建客户端时会把它拆成"主机名 `[` + 端口 `:1]`"，抛
