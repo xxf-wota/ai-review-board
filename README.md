@@ -233,6 +233,7 @@ python -m app.main
 | `python scripts/check_dedup.py` | 17 项：**接话去重的离线自检**（不调大模型）。判据本身（逐字重复要认出来、换个说法也要认出来、不同的问题不能误杀、空文本/库里没记录不报错）+ 节点级真写 MySQL 的四个场景（炒冷饭要重试一次且把被重复的那句念给模型、重试仍重复就放弃且不落库、本来不重复就不许多花一次调用、向量模型不可用时兜底判据照样拦得住逐字重复）。`--reverse` 把阈值抬到 1.01 反向验证，**7 项按预期变红** |
 | `python scripts/calibrate_dedup.py` | **不是验收，是标定尺**：把真评审会里的接话逐条算"与对方原话 / 与自己问过的 / 与议题内他人 / 与整场每一句"的字面相似度与向量余弦，扫 0.50~0.90 各档会挡掉几条、点出被挡的是哪些 id；顺带给出重排序模型的对照分数（备选方案，本版没启用）。`--all` 聚合最近 8 场，报告 `data/_dedup_calibration.txt` —— 现在用的 0.80 与"整场比对"这个口径就是它量出来的 |
 | `python scripts/dump_session_rows.py <session_id>` | 把某场评审会的记录倒成 UTF-8 文本（控制台是 GBK，中文会乱码），排查"这场到底问了什么、判成什么"时用 |
+| `python scripts/backfill_review_owner.py --email <账号>` | **不是验收，是数据修复**：把归属校验上线之前提交的评审会（`review_session.student_id` 是空串的那批）补到指定账号名下。**默认只打印不改**，加 `--apply` 才写库；只改 `student_id` 为空的行，报告 `data/_backfill_owner.txt`。存量那 29 行就是它补的 |
 | `python scripts/make_defense_docs.py` | **答辩材料一键导出**（不是功能验收，是文档构建）：把 `docs/答辩材料-AI交叉质询评审团.md` 转成同名 `.txt` / `.pdf`，另送一份 `.docx`；转完自己验一遍（txt 无残留 Markdown 记号、标题不漏转、关键内容都在；pdf 能抽出文字、关键词命中、字体不缺字、页数够） |
 | `python scripts/dry_run_demo.py` | **演示预跑**（不是功能验收，是上台前自检）：不开网页，直接驱动评审会图把一整场开完，把每一问、每次接话、每条判定、未答好清单和**每问耗时**写进 `data/_demo_dry_run.txt`。`--expect-cross --expect-followup` 会要求这一场里接话和追问都真的出现过，没出现就非零退出 —— 这两个是演示的看点，不能靠赌 |
 | `python scripts/make_demo_inputs.py` | **演示输入素材包**的准备与自检：把 `data/` 下的样本收进 `docs/演示输入素材包/方案样本/`（缺的格式由同名 txt 现生成，所以两份样本三种格式都齐）、查每个样本能不能被 `parse_plan_bytes` 解析、同一份方案三种格式字数差是否在 5% 以内、回答稿是否覆盖四位评审与三种答法、卡片里点到的文件是否都在、预跑记录是否跑完了 |
@@ -333,10 +334,13 @@ python scripts/dry_run_demo.py --strategy demo --expect-cross --expect-followup 
 - **删除会话两边都拦**：面试那半边看 Redis 里的会话记录（`check_session`），评审会那半边看
   `review_session.student_id` —— 评审会的 id 是裸 hex、从来不进 Redis，只查 Redis 是拦不住的，
   这条以前漏着，现在补上了（`check_startup.py` 与 `check_auth_boundary.py` 各有用例盯着）。
-- **老评审会没有归属信息**：`review_session.student_id` 是加了"按账号拉历史"之后才开始写的，
-  此前提交的会这一列全是空串（本次核对：29 行、非空 0 行）。这种"没主"的记录按幂等放行 ——
-  拦下来只会让老会话连开过它的人自己都进不去；代价是**知道那个 id 的人仍能读／删它**（id 是 32 位随机 hex，
-  猜不到）。`GET /review/sessions` 对老会话也返回空，它们仍然只在开过它的那个浏览器的 `localStorage` 里。
+- **存量的"无主"评审会已经回填**：`review_session.student_id` 是加了"按账号拉历史"之后才开始写的，
+  此前提交的会这一列全是空串。已用 `scripts/backfill_review_owner.py` 把那批行补到归属账号下
+  （29 行 → 归属账号名下共 30 场，无归属 0 行；脚本默认只打印不改，`--apply` 才写库）。
+  **但代码里"空归属按幂等放行"那条分支保留着**，因为它还兜着另一类会：没提交过方案、
+  直接调 `POST /review/meeting/start` 开的会，`review_session` 里根本没有这一行，同样"没有归属信息可查" ——
+  这类会只有 `session_id` 一个凭据可比，拦下来等于谁也进不去。
+  **修数据不等于修代码**：数据补一次就没有了，那条放行分支是常驻的。
 - 页面通过 CDN 加载 Vue，**断网会白屏**；现场演示前建议先把依赖本地化。
 - **本机若设了代理环境变量，注意 `NO_PROXY` 里别写 `[::1]` 这种带方括号的写法**：
   httpx 建客户端时会把它拆成"主机名 `[` + 端口 `:1]`"，抛
