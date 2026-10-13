@@ -13,7 +13,7 @@
         <mxCell id="p1b3" value="login.html：邮箱 + 验证码（真发信 SMTP）&#xa;登录即建业务会话（user_id = email）&#xa;登录态存 sessionStorage" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;align=center;verticalAlign=middle;" vertex="1" parent="1">
           <mxGeometry x="480" y="60" width="330" height="90" as="geometry" />
         </mxCell>
-        <mxCell id="p1b4" value="FastAPI · app/web/review_router&#xa;POST /review/upload（Word / PDF / txt → 纯文本）&#xa;POST /review/submit（抽要素表 + 落库）   GET /review/session/{id}（读回纪要 + 未答好清单）&#xa;POST /review/meeting/start（SSE 开场）   POST /review/meeting/answer（SSE 交回答，skip=true 可跳过）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;align=left;verticalAlign=middle;" vertex="1" parent="1">
+        <mxCell id="p1b4" value="FastAPI · app/web/review_router&#xa;POST /review/upload（Word / PDF / txt → 纯文本）&#xa;POST /review/submit（抽要素表 + 落库；提交人由服务端从登录会话反查）   GET /review/sessions（按登录账号列历史）&#xa;GET /review/session/{id}（读回纪要 + 未答好清单）   POST /review/meeting/start（SSE 开场）   POST /review/meeting/answer（SSE 交回答，skip=true 可跳过）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;align=left;verticalAlign=middle;" vertex="1" parent="1">
           <mxGeometry x="30" y="190" width="780" height="110" as="geometry" />
         </mxCell>
         <mxCell id="p1b5" value="LangGraph ReviewGraph（与模拟面试图共用同一个 PostgreSQL 检查点，靠 thread_id 区分）&#xa;manager（同步调度中枢，Command(goto=…) 动态跳转）· extract · speaker · cross · judge" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;align=center;verticalAlign=middle;" vertex="1" parent="1">

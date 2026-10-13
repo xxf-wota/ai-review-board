@@ -68,9 +68,22 @@ async def upload_plan(file: UploadFile = File(...)):
     }
 
 
+# 登录身份只从服务端会话里取：前端把登录时拿到的 session_id 原样带回来，
+# 服务端拿它去 Redis 反查"这份会话属于谁"。客户端自称"我是谁"一律不算数 ——
+# 否则谁都能填别人的邮箱，把评审会记到别人名下、再按那个邮箱读走别人的历史
+async def _student_of(request: Request, login_session_id: str) -> str:
+    agent = getattr(request.app.state, "exam_agent", None)
+    if agent is None:
+        raise HTTPException(status_code=503, detail="登录校验暂时不可用，请稍后再试")
+    user_id = await agent.session_owner((login_session_id or "").strip())
+    if not user_id:
+        raise HTTPException(status_code=401, detail="登录已失效，请重新登录")
+    return user_id
+
+
 # 提交方案文本：抽要素 + 落库，返回结构化要素表
 @review_router.post("/submit")
-async def submit_plan(payload: dict = Body(...)):
+async def submit_plan(request: Request, payload: dict = Body(...)):
     plan_text = (payload.get("plan_text") or "").strip()
     if not plan_text:
         raise HTTPException(status_code=400, detail="方案内容不能为空")
@@ -81,7 +94,8 @@ async def submit_plan(payload: dict = Body(...)):
         )
 
     session_id = (payload.get("session_id") or "").strip() or uuid4().hex
-    student_id = (payload.get("student_id") or "").strip()
+    # 提交人由服务端从登录会话里认，不再接受前端自报的 student_id
+    student_id = await _student_of(request, payload.get("login_session_id") or "")
     plan_title = _guess_title(payload.get("plan_title") or "", plan_text)
 
     # 抽要素，模型都不可用时 extract_elements 内部会降级，不会抛异常
@@ -96,14 +110,14 @@ async def submit_plan(payload: dict = Body(...)):
     }
 
 
-# 列出某个学生开过的评审会（历史侧栏的数据源）。
-# 走的是 review_session.student_id，这一列在提交方案时就写好了 ——
-# 之前只写不读，前端历史靠浏览器 localStorage，换设备就断了
+# 列出**当前登录账号**开过的评审会（历史侧栏的数据源）。
+# 走的是 review_session.student_id —— 这一列在提交方案时就由服务端写好了，
+# 之前只写不读，前端历史靠浏览器 localStorage，换设备就断了。
+# 谁的会由登录会话决定：前端只带 login_session_id，不能指名道姓要别人的历史
 @review_router.get("/sessions")
-async def list_my_sessions(student_id: str = "", limit: int = 50):
-    student_id = (student_id or "").strip()
-    if not student_id:
-        raise HTTPException(status_code=400, detail="缺少 student_id，不知道要列谁的评审会")
+async def list_my_sessions(request: Request, login_session_id: str = "", limit: int = 50):
+    student_id = await _student_of(request, login_session_id)
+    limit = max(1, min(int(limit), 200))
     rows = list_sessions(student_id, limit)
     return {"student_id": student_id, "count": len(rows), "sessions": rows}
 

@@ -103,6 +103,24 @@ class ExamGraphAgent:
             return False, "会话不属于该用户"
         return True, "会话有效"
 
+    async def session_owner(self, session_id):
+        """
+        用登录会话反查它属于谁。给"身份只能由服务端说了算"的接口用：
+        客户端只把登录时拿到的 session_id 原样带回来，谁都不能自称是别人。
+        返回 user_id；会话不存在 / 已过期 / Redis 不可用都返回 None
+        """
+        if not session_id or not self.redis:
+            return None
+        data = await self.redis.get(session_id)
+        if not data:
+            return None
+        try:
+            return str(json.loads(data).get("user_id") or "") or None
+        except (ValueError, TypeError, AttributeError):
+            # 记录坏了就当无效，别让它变成一个"看起来合法"的身份
+            print(f"-----------会话记录格式不对，按无效处理：{session_id}------------")
+            return None
+
     async def purge_session(self, session_id: str) -> dict:
         """
         把一场面试会话留下的东西全清掉：Redis 会话记录 / 窗口记忆 / 会话锁 /

@@ -1025,10 +1025,11 @@
             // 而本地存档只在这个浏览器里，清一次缓存或换台机器就空了。
             // 两边并起来 —— 本地有过的以本地为准（那份带完整过程），
             // 只在后端有的补进侧栏，点开时走 loadRecord 当只读回看
+            // 带的是登录 session_id 而不是邮箱：服务端拿它反查身份，前端说不了自己是谁
             loadReviewHistory: function () {
                 var self = this;
-                if (!this.userId) return;
-                fetch('/review/sessions?student_id=' + encodeURIComponent(this.userId))
+                if (!this.auth.session_id) return;
+                fetch('/review/sessions?login_session_id=' + encodeURIComponent(this.auth.session_id))
                     .then(function (r) { return r.ok ? r.json() : null; })
                     .then(function (res) {
                         var rows = (res && res.sessions) || [];
@@ -1358,11 +1359,13 @@
                 fetch('/review/submit', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    // 带上提交人：后端把 student_id 记进 review_session，
-                    // 历史侧栏才能按账号从后端拉回来（换设备、清缓存也不丢）
+                    // 带上登录会话：后端拿它反查提交人、写进 review_session.student_id，
+                    // 历史侧栏才能按账号从后端拉回来（换设备、清缓存也不丢）。
+                    // 传的是 session_id 这种一次性凭据，不是邮箱 —— 身份由服务端认定，
+                    // 前端就算把这里改成别人的邮箱也不会被采信
                     body: JSON.stringify({
                         plan_text: this.rv.planText,
-                        student_id: this.userId
+                        login_session_id: this.auth.session_id
                     })
                 })
                     .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })

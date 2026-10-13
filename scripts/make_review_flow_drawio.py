@@ -131,8 +131,8 @@ def page_overview(p):
     api = p.box(30, 190, 780, 110,
                 "FastAPI · app/web/review_router\n"
                 "POST /review/upload（Word / PDF / txt → 纯文本）\n"
-                "POST /review/submit（抽要素表 + 落库）   GET /review/session/{id}（读回纪要 + 未答好清单）\n"
-                "POST /review/meeting/start（SSE 开场）   POST /review/meeting/answer（SSE 交回答，skip=true 可跳过）",
+                "POST /review/submit（抽要素表 + 落库；提交人由服务端从登录会话反查）   GET /review/sessions（按登录账号列历史）\n"
+                "GET /review/session/{id}（读回纪要 + 未答好清单）   POST /review/meeting/start（SSE 开场）   POST /review/meeting/answer（SSE 交回答，skip=true 可跳过）",
                 align="left")
     graph = p.box(30, 340, 780, 80,
                   "LangGraph ReviewGraph（与模拟面试图共用同一个 PostgreSQL 检查点，靠 thread_id 区分）\n"
