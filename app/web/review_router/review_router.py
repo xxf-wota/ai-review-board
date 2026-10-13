@@ -15,6 +15,7 @@ from app.ai.tool.review_dao import (
     list_sessions,
     save_session,
 )
+from app.web.identity import caller_id, deny_if_not_review_owner
 
 """
 评审会接口
@@ -68,20 +69,8 @@ async def upload_plan(file: UploadFile = File(...)):
     }
 
 
-# 登录身份只从服务端会话里取：前端把登录时拿到的 session_id 原样带回来，
-# 服务端拿它去 Redis 反查"这份会话属于谁"。客户端自称"我是谁"一律不算数 ——
-# 否则谁都能填别人的邮箱，把评审会记到别人名下、再按那个邮箱读走别人的历史
-async def _student_of(request: Request, login_session_id: str) -> str:
-    agent = getattr(request.app.state, "exam_agent", None)
-    if agent is None:
-        raise HTTPException(status_code=503, detail="登录校验暂时不可用，请稍后再试")
-    user_id = await agent.session_owner((login_session_id or "").strip())
-    if not user_id:
-        raise HTTPException(status_code=401, detail="登录已失效，请重新登录")
-    return user_id
-
-
 # 提交方案文本：抽要素 + 落库，返回结构化要素表
+# 提交人由服务端从登录会话里认（app/web/identity.py），不再接受前端自报的 student_id
 @review_router.post("/submit")
 async def submit_plan(request: Request, payload: dict = Body(...)):
     plan_text = (payload.get("plan_text") or "").strip()
@@ -95,7 +84,7 @@ async def submit_plan(request: Request, payload: dict = Body(...)):
 
     session_id = (payload.get("session_id") or "").strip() or uuid4().hex
     # 提交人由服务端从登录会话里认，不再接受前端自报的 student_id
-    student_id = await _student_of(request, payload.get("login_session_id") or "")
+    student_id = await caller_id(request, payload.get("login_session_id") or "")
     plan_title = _guess_title(payload.get("plan_title") or "", plan_text)
 
     # 抽要素，模型都不可用时 extract_elements 内部会降级，不会抛异常
@@ -116,7 +105,7 @@ async def submit_plan(request: Request, payload: dict = Body(...)):
 # 谁的会由登录会话决定：前端只带 login_session_id，不能指名道姓要别人的历史
 @review_router.get("/sessions")
 async def list_my_sessions(request: Request, login_session_id: str = "", limit: int = 50):
-    student_id = await _student_of(request, login_session_id)
+    student_id = await caller_id(request, login_session_id)
     limit = max(1, min(int(limit), 200))
     rows = list_sessions(student_id, limit)
     return {"student_id": student_id, "count": len(rows), "sessions": rows}
@@ -124,8 +113,11 @@ async def list_my_sessions(request: Request, login_session_id: str = "", limit: 
 
 # 读回一次评审会：基本信息 + 会议纪要（质询记录时间线）+ 未答好的问题清单
 # 前端刷新后恢复现场、排查线上问题，都靠这个接口
+# 读的是别人开过的会就拒：内容里有方案正文和学生的原话
 @review_router.get("/session/{session_id}")
-async def read_session(session_id: str):
+async def read_session(request: Request, session_id: str, login_session_id: str = ""):
+    caller = await caller_id(request, login_session_id)
+    deny_if_not_review_owner(session_id, caller)
     data = get_session(session_id)
     if not data:
         raise HTTPException(status_code=404, detail=f"没有找到评审会 {session_id}")
@@ -193,6 +185,8 @@ def _review_agent(request: Request):
 @review_router.post("/meeting/start")
 async def meeting_start(request: Request, payload: dict = Body(...)):
     session_id = (payload.get("session_id") or "").strip() or uuid4().hex
+    caller = await caller_id(request, payload.get("login_session_id") or "")
+    deny_if_not_review_owner(session_id, caller)
     plan_text = (payload.get("plan_text") or "").strip()
     max_round = int(payload.get("max_round") or 1)
 
@@ -219,10 +213,14 @@ async def meeting_answer(request: Request, payload: dict = Body(...)):
     if not session_id:
         raise HTTPException(status_code=400, detail="缺少 session_id，不知道这个回答要接到哪场评审会")
 
+    # 身份先认，再看归属：不是自己开的会，连它开没开场、停在哪一步都不该告诉外面
+    caller = await caller_id(request, payload.get("login_session_id") or "")
+    deny_if_not_review_owner(session_id, caller)
+
     answer = SKIP_MARK if payload.get("skip") else (payload.get("answer") or "").strip()
     graph = _review_agent(request)
 
-    # 先确认这场会议真的停在"等学生回答"上。
+    # 再确认这场会议真的停在"等学生回答"上。
     # 不校验的话，一个乱填的 session_id 会让图凭空从 START 开一场要素表为空的会；
     # 会议已经散场了再交回答，也会把上一题的回答接到一个过期的状态上
     values = await graph.snapshot_values(session_id)

@@ -32,6 +32,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import uuid
 
 import psycopg
 import redis as redis_sync
@@ -42,6 +43,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 from app.ai.tool.review_dao import (  # noqa: E402
+    delete_session as delete_review_session,
     get_questions,
     get_session,
     save_questions,
@@ -84,6 +86,20 @@ LOGIN_MARKERS = [
     "/auth/send_code",
     "/auth/login",
 ]
+
+
+# 造一条登录会话。删会话接口现在只认"服务端从登录会话反查出来的账号"，
+# 所以先得有登录会话才谈得上归属。键名与 /auth/login 成功后那套一致，
+# 直接写 Redis 而不再走一遍发信收码 —— 和给验证码打桩是同一套路
+def _redis_client():
+    return redis_sync.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+
+
+def seed_login_session(user_id, ttl=600):
+    sid = f"session:{uuid.uuid4().hex}"
+    _redis_client().set(
+        sid, json.dumps({"user_id": user_id, "create_time": time.time()}), ex=ttl)
+    return sid
 
 
 def port_open(port):
@@ -214,6 +230,7 @@ def main():
         ok_reuse = ok_deny = False
         ok_bad_email = ok_wrong_code = ok_login = ok_login_session = ok_code_once = False
         ok_purged = ok_gone = ok_deny_delete = False
+        ok_deny_no_cred = ok_deny_review_delete = ok_review_delete_own = False
         if up:
             # 1) 三个入口：/ 和 /review 都先落到登录页（登录页看本地状态决定放不放行）
             status, url, _ = http_get("/")
@@ -244,6 +261,8 @@ def main():
             # 3) 会话：新建 -> 页面把本地存的带回来 -> 复用
             r1 = http_post("/create_session", {"user_id": "startup_check", "session_id": ""})
             sid = r1["data"]
+            # 评审会归属那条用例用的会（id 提前造好，finally 里还要拿它收尾）
+            rev_sid = f"revdel-{uuid.uuid4().hex}"
             r2 = http_post("/create_session", {"user_id": "startup_check", "session_id": sid})
             ok_reuse = r2.get("data") == sid
             log(f"\n  新建会话                      -> {r1['msg']} / {sid}")
@@ -295,6 +314,10 @@ def main():
             rc.delete(f"auth:code:{CHECK_EMAIL}")
 
             # 6) 删会话：先给这场会话造齐痕迹，删完逐样数一遍
+            # 身份由服务端从登录会话里认，所以先给这几个账号各造一条登录会话
+            del_login = seed_login_session(DEL_USER)
+            other_login = seed_login_session("someone_else")
+            own_login = seed_login_session("startup_check")
             del_sid = http_post("/create_session",
                                 {"user_id": DEL_USER, "session_id": ""})["data"]
             rc.rpush(f"window_memory:{del_sid}",
@@ -328,7 +351,7 @@ def main():
             }
             log(f"\n  给这场会话造好的痕迹          -> {seeded}")
 
-            st_del, body_del = http_delete_raw(f"/session/{del_sid}?user_id={DEL_USER}")
+            st_del, body_del = http_delete_raw(f"/session/{del_sid}?login_session_id={del_login}")
             left = {
                 "redis 会话记录": rc.exists(del_sid),
                 "窗口记忆": rc.exists(f"window_memory:{del_sid}"),
@@ -348,18 +371,51 @@ def main():
             log(f"  拿删掉的会话再 /create_session -> {r5['msg']} / {r5['data']}")
             log(f"    删掉的会话回不来了          -> {'是' if ok_gone else '否'}")
 
+            # 没凭据删会话：401，而且东西一样都不能少
+            st_401, body_401 = http_delete_raw(f"/session/{sid}")
+            ok_deny_no_cred = st_401 == 401 and rc.exists(sid) == 1
+            log(f"  不带凭据去删别人的会话        -> {st_401} {body_401.get('detail')}")
+            log(f"    被拒且会话还在              -> {'是' if ok_deny_no_cred else '否'}")
+
             # 别人的会话删不掉：先拒，再确认它还在
-            st_403, body_403 = http_delete_raw(f"/session/{sid}?user_id=someone_else")
+            st_403, body_403 = http_delete_raw(f"/session/{sid}?login_session_id={other_login}")
             ok_deny_delete = st_403 == 403 and rc.exists(sid) == 1
-            log(f"  换个用户去删别人的会话        -> {st_403} {body_403.get('detail')}")
+            log(f"  换个账号去删别人的会话        -> {st_403} {body_403.get('detail')}")
             log(f"    被拒且会话还在              -> {'是' if ok_deny_delete else '否'}")
 
+            # 评审会那半边的归属只写在 MySQL 里（评审会的 id 是裸 hex，不进 Redis，
+            # 面试那半边的 check_session 看不到它），所以单独造一场属于别人的会来验
+            save_session(rev_sid, "验收用评审会", "验收用的方案正文", {}, "someone_else")
+            st_rev403, body_rev403 = http_delete_raw(
+                f"/session/{rev_sid}?login_session_id={del_login}")
+            ok_deny_review_delete = st_rev403 == 403 and get_session(rev_sid) is not None
+            log(f"  换个账号删别人的评审会        -> {st_rev403} {body_rev403.get('detail')}")
+            log(f"    被拒且记录还在              -> {'是' if ok_deny_review_delete else '否'}")
+
+            st_rev_own, body_rev_own = http_delete_raw(
+                f"/session/{rev_sid}?login_session_id={other_login}")
+            ok_review_delete_own = st_rev_own == 200 and get_session(rev_sid) is None
+            log(f"  归属者自己删这场评审会        -> {st_rev_own} {body_rev_own.get('msg')}")
+            log(f"    评审会记录已清              -> {'是' if ok_review_delete_own else '否'}")
+
             # 收尾：用真正的归属者把它删掉（顺带再走一遍成功路径）
-            st_own, body_own = http_delete_raw(f"/session/{sid}?user_id=startup_check")
+            st_own, body_own = http_delete_raw(f"/session/{sid}?login_session_id={own_login}")
             log(f"  归属者自己删（收尾）          -> {st_own} {body_own.get('msg')}")
             log(f"    会话记录已清                -> {rc.exists(sid) == 0}")
 
     finally:
+        # 探针在评审会表里造的那行、以及本次造的登录会话，都收干净 ——
+        # 用例失败时它们会留在真库里，下一轮就查不清是谁留下的
+        cleanup_rev = locals().get("rev_sid")
+        if cleanup_rev:
+            try:
+                delete_review_session(cleanup_rev)
+            except Exception as e:
+                log(f"  （收尾时清评审会探针失败：{e}）")
+        cleanup_rc = locals().get("rc")
+        for key in (locals().get("del_login"), locals().get("other_login"), locals().get("own_login")):
+            if key and cleanup_rc:
+                cleanup_rc.delete(key)
         if proc.poll() is None:
             proc.terminate()
             try:
@@ -389,7 +445,10 @@ def main():
         ("验证码一次性                  ", ok_code_once),
         ("删会话清干净痕迹              ", ok_purged),
         ("删掉的会话回不来              ", ok_gone),
+        ("没凭据删会话被拒              ", ok_deny_no_cred),
         ("别人的会话删不掉              ", ok_deny_delete),
+        ("别人的评审会删不掉            ", ok_deny_review_delete),
+        ("归属者自己删评审会            ", ok_review_delete_own),
     ]
     for title, ok in checks:
         log(f"  {title}：{'通过' if ok else '不通过'}")

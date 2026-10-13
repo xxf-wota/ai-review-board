@@ -5,6 +5,7 @@ from pydantic import BaseModel
 import json
 
 from app.ai.tool.review_dao import delete_session as delete_review_session
+from app.web.identity import caller_id, deny_if_not_review_owner
 
 chat_router = APIRouter()
 
@@ -38,24 +39,31 @@ async def create_session(request: Request, session: SessionSchema):
 # 删除一场会话：面试留下的（Redis 会话记录 / 窗口记忆 / 会话锁 / PostgreSQL 摘要 / 检查点）
 # 和评审会留下的（MySQL 的 review_session + review_question）一起清，两边用同一个 session_id。
 # 前端侧栏每条记录上的 ✕ 走的就是这里
+# 调用者是谁由服务端从登录会话里认，不接受前端自报的 user_id —— 这是"删东西"的接口，
+# 自报身份等于谁都能删别人的会话
 @chat_router.delete("/session/{session_id}")
-async def delete_session(request: Request, session_id: str, user_id: str = ""):
+async def delete_session(request: Request, session_id: str, login_session_id: str = ""):
     session_id = (session_id or "").strip()
     if not session_id:
         raise HTTPException(status_code=400, detail="缺少 session_id")
 
     exam_agent = request.app.state.exam_agent
+    caller = await caller_id(request, login_session_id)
 
-    # 归属校验：Redis 里还留着的会话记录能证明它是谁的，不是这个用户的直接拒。
+    # 面试那一半的归属校验：Redis 里还留着的会话记录能证明它是谁的，不是这个账号的直接拒。
     # 记录过期了、或者这本来就是一场评审会（它的 id 是裸 hex，从来不进 Redis），
     # 就没有归属信息可查，按幂等删除处理 —— 删一个已经不在的会话不该报错
-    ok, reason = await exam_agent.check_session(user_id, session_id)
+    ok, reason = await exam_agent.check_session(caller, session_id)
     if not ok and reason == "会话不属于该用户":
         raise HTTPException(status_code=403, detail=reason)
 
+    # 评审会那一半的归属写在 review_session.student_id 里（改动之后提交的会才有），
+    # 上面那次 check_session 看不到它 —— 评审会不经过 Redis
+    deny_if_not_review_owner(session_id, caller)
+
     report = await exam_agent.purge_session(session_id)
     report.update(delete_review_session(session_id))
-    print(f"删除会话：{session_id}（用户 {user_id}）-> {report}")
+    print(f"删除会话：{session_id}（账号 {caller}）-> {report}")
     return {"code": 200, "msg": "会话已删除", "data": report}
 
 

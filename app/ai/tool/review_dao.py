@@ -60,6 +60,19 @@ def get_session(session_id: str):
         conn.close()
 
 
+# 这场评审会是谁开的。返回 student_id，取不到归属信息就返回空串：
+# 表里没这一行（比如直接调 /review/meeting/start 开的会，压根没提交过方案），
+# 或者这一列是空的（改动之前提交的会没写这一列）—— 两种都算"没有归属信息可查"。
+# 接口层拿它比一下调用者，就不必再自己去解析 SQL 结果
+def session_owner(session_id: str) -> str:
+    if not session_id:
+        return ""
+    row = get_session(session_id)
+    if not row:
+        return ""
+    return (row.get("student_id") or "").strip()
+
+
 # 按学生列出他开过的评审会，最近创建的在前。
 # student_id 从提交方案那一刻就写进去了，但之前只写不读 —— 前端的历史侧栏
 # 存在浏览器 localStorage 里，换台机器、清一次缓存，自己开过的会就看不见了。

@@ -264,13 +264,17 @@ M1~M5 合计约 7.5 天，比 A12（三个模块、知识点树/DAG/RAG/理解�
 | `GET /review/session/{id}` | 读回一次评审会 | 200，读回数据与写入一致（要素表 8 字段、正文 699 字） |
 | 错误输入 | 空方案 / 旧版 .doc / 空文件 / 不存在的会话 | 400 / 400 / 400 / 404，**没有 500** |
 
-> **提交人从哪来（2026-09 改）**：`/review/submit` 与 `/review/sessions` 都**不收**前端自报的账号，
-> 只收 `login_session_id`（登录时拿到的那个 `session:<hex>`），服务端拿它去 Redis 反查 `user_id`
+> **提交人从哪来（2026-09 改）**：评审会这侧的身份**全部由服务端判定**（服务端收口在 `app/web/identity.py`），
+> 前端只把登录时拿到的 `login_session_id`（那个 `session:<hex>`）原样带回来，服务端拿它去 Redis 反查 `user_id`
 > （`ExamGraphAgent.session_owner()`）；会话不存在 / 已过期 / Redis 不可用一律 401，失败的那次**不落库**。
-> 实测 7 项：不带凭据 401、假凭据 401、真凭据 200 且账号由服务端反查、body 里冒名别人的 `student_id` 不被采信
-> （库里写进去的是登录账号）、`limit=0` 与 `limit=99999` 都不崩、刚提交的会出现在自己的历史里。
-> 仍未做归属校验的三个接口（`/review/session/{id}`、`/review/meeting/start`、`/review/meeting/answer`）
-> 只认 `session_id` 本身 —— 32 位随机 hex 猜不到，但也证不了"这场会是你的"，与删除接口一样记在下一步。
+> 覆盖到五个接口：`/review/submit`、`/review/sessions`、`/review/session/{id}`、`/review/meeting/start`、
+> `/review/meeting/answer`，以及 `DELETE /session/{id}` 的评审会那半边。
+> 实测 15 项（`scripts/check_auth_boundary.py`）：不带凭据 401、假凭据 401、真凭据 200 且账号由服务端反查、
+> body 里冒名别人的 `student_id` 不被采信（库里写进去的是登录账号）、`limit=0` 与 `limit=99999` 都不崩、
+> 刚提交的会出现在自己的历史里；归属那一组：读别人的会 403 / 开别人的会 403 / 答别人的会 403 /
+> 删别人的会 403 且那行还在（不带凭据 401、归属者自己删 200 且真没了）。
+> 归属规则是"有主且不是你 → 403"，`review_session.student_id` 为空的老会（改动之前提交的）按幂等放行，
+> 记在 README 的「已知事项」里。
 
 **三种文档格式都通过：** txt 705 字、docx 699 字、pdf 503 字，关键内容均命中。
 （PDF 测试件是手写字节流生成的英文方案 —— 环境里没有 reportlab/fpdf，而 base14 字体不含中文字形，为一个解析测试不值得内嵌 CJK 字体。要验证的是"能否抽出文字"，英文同样有效。）

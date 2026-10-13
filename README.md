@@ -216,7 +216,7 @@ python -m app.main
 |---|---|---|
 | POST | `/create_session` | 建会话 / 校验并复用已有会话 |
 | GET | `/chat` | SSE 流式对话与出题（带 `session_id` 才接得上记忆） |
-| DELETE | `/session/{session_id}` | **删除一场会话**（带 `?user_id=` 做归属校验）。面试留下的 Redis 会话记录／窗口记忆／会话锁、PostgreSQL 摘要与**图检查点**，以及评审会留下的 `review_session` + `review_question` 一起清；长期记忆／画像按 `user_id` 走，不动 |
+| DELETE | `/session/{session_id}` | **删除一场会话**（带 `?login_session_id=`，服务端据此反查账号再校验归属；面试那半边查 Redis 里的会话记录，评审会那半边查 `review_session.student_id`）。面试留下的 Redis 会话记录／窗口记忆／会话锁、PostgreSQL 摘要与**图检查点**，以及评审会留下的 `review_session` + `review_question` 一起清；长期记忆／画像按 `user_id` 走，不动 |
 
 ---
 
@@ -224,11 +224,11 @@ python -m app.main
 
 | 脚本 | 验证内容 |
 |---|---|
-| `python scripts/check_startup.py` | **真起一次服务**（子进程 `python -m app.main`），16 项：事件循环、三个入口跳转、两个页面标记、会话复用与归属、登录（码错／码对／一次性／登录给的会话能接着用）、删会话（先给这场会造齐 Redis／摘要／检查点／评审记录的痕迹，删完逐样数一遍是不是真没了；删掉的会话回不来；别人的会话删不掉）—— TestClient 抓不到的那一层 |
-| `python scripts/check_page.py` | 17 项：入口路由、标记齐全、旧页面确实删了、JS 语法（两个页面）、模板变量对账、前后端接口对账、登录贯通（登录页存会话 → 主页面没登录跳回 → 主页面接上会话）、侧栏删除会话（按钮 + `DELETE` + 归属者 + 二次确认）、气泡对齐不变式、Markdown 栅栏兜底（`stripFence` 的五个用例，带标记闭合／带标记未闭合／无标记整篇栅栏／真代码块不许动／普通 Markdown 不许动）、聊天列宽（消息列和输入框必须一样宽） |
+| `python scripts/check_startup.py` | **真起一次服务**（子进程 `python -m app.main`），19 项：事件循环、三个入口跳转、两个页面标记、会话复用与归属、登录（码错／码对／一次性／登录给的会话能接着用）、删会话（先给这场会造齐 Redis／摘要／检查点／评审记录的痕迹，删完逐样数一遍是不是真没了；删掉的会话回不来；**没凭据删被拒 401**；别人的会话删不掉 403；**别人的评审会也删不掉 403 且记录还在**；归属者自己删这场评审会 200 且记录真没了）—— TestClient 抓不到的那一层 |
+| `python scripts/check_page.py` | 18 项：入口路由、标记齐全、旧页面确实删了、JS 语法（两个页面）、模板变量对账、前后端接口对账、登录贯通（登录页存会话 → 主页面没登录跳回 → 主页面接上会话）、侧栏删除会话（按钮 + `DELETE` + **登录会话** + 二次确认，且页面里不再出现 `?user_id=`）、**评审会接口都带登录会话**（提交／列历史／读回／开场／交回答）、气泡对齐不变式、Markdown 栅栏兜底（`stripFence` 的五个用例，带标记闭合／带标记未闭合／无标记整篇栅栏／真代码块不许动／普通 Markdown 不许动）、聊天列宽（消息列和输入框必须一样宽） |
 | `python scripts/init_review_db.py` | 建评审会两张表 + 增量补列 + 清掉废弃表与测试残留 |
 | `python scripts/check_review_index.py` | 29 项：**离线跑完一整场评审会**（假模型，不调 Ollama、不联网）验收"状态只存索引、正文在 MySQL"这条改造 —— 索引 id 与库主键逐条对齐、判定后问题原文从状态里消失、回答与评语落回库里那条、散会纪要由库现取、接话指向谁、追问只追一层、重开同一会话先清旧记录且新旧 id 不重叠。这层改造任何一处回退它都会变红（验过：只把 `store.reset` 换成空函数，正好 2 项失败） |
-| `python scripts/check_auth_boundary.py` | 7 项：**评审会接口的身份边界**（离线，抽要素打桩，不调模型、不联网）。`/review/submit` 与 `/review/sessions` 都不收前端自报的账号，只收 `login_session_id`，服务端拿去 Redis 反查 `user_id`：不带凭据 401、假凭据 401、真凭据 200 且账号由服务端反查、`limit=0` 与 `limit=99999` 都夹到 1–200、submit 没凭据 401 **且不落库**、body 里冒名别人的 `student_id` 不被采信（库里写进去的是登录账号）、刚提交的这场会出现在自己的历史里。跑完把造的数据清掉 |
+| `python scripts/check_auth_boundary.py` | 15 项：**评审会接口的身份边界与归属**（离线，抽要素打桩，不调模型、不联网）。`/review/submit` 与 `/review/sessions` 都不收前端自报的账号，只收 `login_session_id`，服务端拿去 Redis 反查 `user_id`：不带凭据 401、假凭据 401、真凭据 200 且账号由服务端反查、`limit=0` 与 `limit=99999` 都夹到 1–200、submit 没凭据 401 **且不落库**、body 里冒名别人的 `student_id` 不被采信（库里写进去的是登录账号）、刚提交的这场会出现在自己的历史里；再验**归属**：读别人的会 403（不带凭据 401、自己的 200）、开别人的会 403、答别人的会 403、删别人的会 403 **且那行还在**（不带凭据 401、归属者自己删 200 且那行真没了）。跑完把造的数据清掉 |
 | `python scripts/measure_review_tokens.py` | **不是验收，是量尺**：用真实会话把每一次模型调用的提示词按类目复原、估 token，并对比"整份 `question_log` 进状态"与"只留索引"两种写法的检查点累计体积（同一场真实会议：428 KB → 50 KB，8.7 倍）。`--rounds 3` 可投影多轮会议 |
 | `python scripts/check_dedup.py` | 17 项：**接话去重的离线自检**（不调大模型）。判据本身（逐字重复要认出来、换个说法也要认出来、不同的问题不能误杀、空文本/库里没记录不报错）+ 节点级真写 MySQL 的四个场景（炒冷饭要重试一次且把被重复的那句念给模型、重试仍重复就放弃且不落库、本来不重复就不许多花一次调用、向量模型不可用时兜底判据照样拦得住逐字重复）。`--reverse` 把阈值抬到 1.01 反向验证，**7 项按预期变红** |
 | `python scripts/calibrate_dedup.py` | **不是验收，是标定尺**：把真评审会里的接话逐条算"与对方原话 / 与自己问过的 / 与议题内他人 / 与整场每一句"的字面相似度与向量余弦，扫 0.50~0.90 各档会挡掉几条、点出被挡的是哪些 id；顺带给出重排序模型的对照分数（备选方案，本版没启用）。`--all` 聚合最近 8 场，报告 `data/_dedup_calibration.txt` —— 现在用的 0.80 与"整场比对"这个口径就是它量出来的 |
@@ -322,13 +322,21 @@ python scripts/dry_run_demo.py --strategy demo --expect-cross --expect-followup 
   问题原文、学生回答、判定评语写在 MySQL 的 `review_question` 里，谁要用谁按 `id` 取 ——
   检查点体积因此降了一个数量级（同一场真实会议 428 KB → 50 KB），而且不随记录数平方增长。
   模拟面试的四层记忆（窗口 / 摘要 / 长期 / 画像）另有实现，评审模块**不用**它 —— 理由见方案第六之一节。
-- **评审会这侧"谁是谁"现在由服务端判定**：`/review/submit` 和 `/review/sessions` 都不再收前端自报的账号，
-  只收 `login_session_id`（登录时拿到的那个 `session:<hex>`），服务端拿它去 Redis 查 `user_id`（`ExamGraphAgent.session_owner()`）——
-  会话不存在／过期／Redis 不可用一律 401。所以**别人填你的邮箱也写不进你的账号名下、读不走你的历史**。
-  仍然没有归属校验的是另外三个接口：`/review/session/{id}`、`/review/meeting/start`、`/review/meeting/answer` 只认 `session_id` 本身
-  （裸 32 位 hex，猜不到但也没法证明"这场会是你的"），删除评审会同样按幂等删除处理 —— 这是下一步。
-- **删除会话的归属校验只有面试那一半拦得住**：面试会话在 Redis 里有 `user_id`，删的时候能对一下；评审会的 `session_id` 是裸 hex、从来不进 Redis，所以删评审会按幂等删除处理。不过**归属信息现在已经落库了**：提交方案时会把登录账号写进 `review_session.student_id`（侧栏那份历史就是按它拉的），删除接口还没拿它做校验 —— 这是下一步。
-- **按账号拉的那份历史只覆盖改动之后新提交的评审会**：`review_session.student_id` 是这次才开始写的，此前提交的会这一列全是空串（本次核对：29 行、非空 0 行），所以 `GET /review/sessions` 对老会话返回空 —— 老的那些仍然只在开过它的那个浏览器的 `localStorage` 里，换设备就看不到。
+- **评审会这侧"谁是谁"全部由服务端判定**（`app/web/identity.py` 一处收口）：前端只把登录时拿到的
+  `login_session_id`（那个 `session:<hex>`）原样带回来，服务端拿它去 Redis 查 `user_id`
+  （`ExamGraphAgent.session_owner()`）—— 会话不存在／过期／Redis 不可用一律 401。
+  所以**别人填你的邮箱也写不进你的账号名下、读不走你的历史**。覆盖到这五个接口：
+  `POST /review/submit`、`GET /review/sessions`、`GET /review/session/{id}`、`POST /review/meeting/start`、
+  `POST /review/meeting/answer`，以及 `DELETE /session/{id}` 的评审会那半边。
+  归属校验的规则是"有主且不是你 → 403"：`review_session.student_id` 有值就比，读到别人的会读不到内容、
+  开不了、答不了、也删不掉。
+- **删除会话两边都拦**：面试那半边看 Redis 里的会话记录（`check_session`），评审会那半边看
+  `review_session.student_id` —— 评审会的 id 是裸 hex、从来不进 Redis，只查 Redis 是拦不住的，
+  这条以前漏着，现在补上了（`check_startup.py` 与 `check_auth_boundary.py` 各有用例盯着）。
+- **老评审会没有归属信息**：`review_session.student_id` 是加了"按账号拉历史"之后才开始写的，
+  此前提交的会这一列全是空串（本次核对：29 行、非空 0 行）。这种"没主"的记录按幂等放行 ——
+  拦下来只会让老会话连开过它的人自己都进不去；代价是**知道那个 id 的人仍能读／删它**（id 是 32 位随机 hex，
+  猜不到）。`GET /review/sessions` 对老会话也返回空，它们仍然只在开过它的那个浏览器的 `localStorage` 里。
 - 页面通过 CDN 加载 Vue，**断网会白屏**；现场演示前建议先把依赖本地化。
 - **本机若设了代理环境变量，注意 `NO_PROXY` 里别写 `[::1]` 这种带方括号的写法**：
   httpx 建客户端时会把它拆成"主机名 `[` + 端口 `:1]`"，抛

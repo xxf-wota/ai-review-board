@@ -1109,7 +1109,7 @@
                 }
 
                 fetch('/session/' + encodeURIComponent(item.id) +
-                      '?user_id=' + encodeURIComponent(this.userId), { method: 'DELETE' })
+                      '?login_session_id=' + encodeURIComponent(this.auth.session_id), { method: 'DELETE' })
                     .then(function (r) {
                         return r.json().then(function (d) { return { ok: r.ok, d: d }; });
                     })
@@ -1310,7 +1310,8 @@
             loadRecord: function (s) {
                 var self = this;
                 s.loading = true;
-                fetch('/review/session/' + encodeURIComponent(s.id))
+                fetch('/review/session/' + encodeURIComponent(s.id) +
+                      '?login_session_id=' + encodeURIComponent(this.auth.session_id))
                     .then(function (r) { return r.ok ? r.json() : null; })
                     .then(function (d) {
                         s.loading = false;
@@ -1439,7 +1440,10 @@
                 fetch('/review/meeting/start', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ session_id: this.rv.id, max_round: 1 })
+                    body: JSON.stringify({
+                        session_id: this.rv.id, max_round: 1,
+                        login_session_id: this.auth.session_id
+                    })
                 })
                     .then(function (resp) { return self.pump(resp); })
                     .catch(function (err) { self.reviewError = String(err.message || err); })
@@ -1476,7 +1480,10 @@
                 fetch('/review/meeting/answer', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ session_id: this.rv.id, answer: answer, skip: !!skip })
+                    body: JSON.stringify({
+                        session_id: this.rv.id, answer: answer, skip: !!skip,
+                        login_session_id: this.auth.session_id
+                    })
                 })
                     .then(function (resp) { return self.pump(resp); })
                     .catch(function (err) { self.reviewError = String(err.message || err); })

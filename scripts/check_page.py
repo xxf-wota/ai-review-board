@@ -301,18 +301,30 @@ def main():
         log(f"\n  登录贯通（登录页存会话 -> 主页面没登录跳回 -> 主页面接上这个会话）："
             f"{'通过' if ok_wire else '不通过'}")
 
-        # 7) 侧栏删除会话：按钮在模板里、点了走后端 DELETE、会话 id 和用户都带上了。
-        # @click.stop 不能少，否则点 ✕ 会穿透到 openHistory（顺手把会话切走）
+        # 7) 侧栏删除会话：按钮在模板里、点了走后端 DELETE、会话 id 和**登录会话**都带上了。
+        # @click.stop 不能少，否则点 ✕ 会穿透到 openHistory（顺手把会话切走）。
+        # 带 login_session_id 而不是 user_id：删会话的调用者是谁，由服务端拿登录会话去 Redis 反查
         ok_delete = (
             'class="hist-del"' in html
             and '@click.stop="removeSession(i)"' in html
             and "method: 'DELETE'" in html
             and "'/session/' + encodeURIComponent(item.id)" in html
-            and "'?user_id=' + encodeURIComponent(this.userId)" in html
+            and "'?login_session_id=' + encodeURIComponent(this.auth.session_id)" in html
+            and "'?user_id=' + encodeURIComponent(this.userId)" not in html
             and "window.confirm" in html
         )
-        log(f"\n  侧栏删除会话（按钮 + DELETE /session/<id> 带 user_id + 二次确认）："
+        log(f"\n  侧栏删除会话（按钮 + DELETE /session/<id> 带登录会话 + 二次确认）："
             f"{'通过' if ok_delete else '不通过'}")
+
+        # 7b) 评审会的四个接口也要带登录会话：提交方案 / 列历史 / 读回往期 / 开场 / 交回答。
+        # 少一个就是那个接口还能被冒名调用
+        want_body = html.count("login_session_id: this.auth.session_id")
+        want_query = html.count("'?login_session_id=' + encodeURIComponent(this.auth.session_id)")
+        ok_review_auth = want_body >= 3 and want_query >= 2 and (
+            "/review/sessions?login_session_id=" in html)
+        log(f"\n  评审会接口都带登录会话（提交/列历史/读回/开场/交回答，"
+            f"body {want_body} 处 + query {want_query} 处）："
+            f"{'通过' if ok_review_auth else '不通过'}")
 
         # 8) Markdown 兜底：模型把整篇回答套进 ```markdown 时，前端要拆壳再解析
         # （实测存进 Redis 的面试评价报告原文就是这样，不拆的话整篇被当代码块渲染）
@@ -384,6 +396,7 @@ def main():
         ("登录页模板变量有定义  ", not lunknown),
         ("登录贯通              ", ok_wire),
         ("侧栏删除会话          ", ok_delete),
+        ("评审会接口带登录会话  ", ok_review_auth),
         ("Markdown 栅栏兜底     ", ok_md),
         ("聊天列宽一致          ", ok_width),
         ("学生气泡靠右          ", ok_align),
